@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Palmara
 
-## Getting Started
+A small, polished web app for AI palm readings grounded in real palmistry. Upload
+or snap a photo of your palm, get a reading of your hand's element and the four
+major lines, ask follow-up questions, and share the result via a permanent
+unguessable link. No accounts.
 
-First, run the development server:
+## Stack
+
+- **Next.js (App Router)** + **Tailwind CSS v4** — front end
+- **Next Route Handlers** — API, deployed as Vercel Serverless Functions
+- **OpenRouter** (OpenAI-compatible Chat Completions) — vision + chat, server-side only
+- **Supabase** — Postgres for readings/messages, private Storage bucket for images
+- **Vercel** — hosting
+
+## Local development
 
 ```bash
+npm install
+cp .env.example .env.local   # then fill in the values below
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Where to get it |
+| --- | --- |
+| `OPENROUTER_API_KEY` | https://openrouter.ai/keys |
+| `OPENROUTER_MODEL` | Any image-capable model id from https://openrouter.ai/models. Default `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` (free, multimodal, slow). Swap to a paid vision model — e.g. `google/gemini-2.0-flash-001` — with no code changes. |
+| `SUPABASE_URL` | Supabase → Project Settings → Data API → Project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → `service_role`. **Server-side only. Never expose to the client.** |
+| `NEXT_PUBLIC_SITE_URL` | Optional. Canonical origin for absolute share links (e.g. `https://palmara.vercel.app`). Falls back to the Vercel URL, then the request host. |
 
-## Learn More
+### Database schema
 
-To learn more about Next.js, take a look at the following resources:
+Run `supabase/schema.sql` against your project (or use the Supabase SQL editor).
+It creates the `readings` and `reading_messages` tables with RLS enabled and **no
+policies** — every read/write goes through the service role key on the server.
+Also create a **private** Storage bucket named `palm-photos`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## How it works
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **`POST /api/readings`** — validates the compressed base64 image, uploads it to
+   the `palm-photos` bucket, inserts a `readings` row (`status: 'processing'`),
+   returns `{ id }` immediately.
+2. **`POST /api/readings/[id]/generate`** — fired by the client without blocking
+   navigation. Downloads the stored image, calls the OpenRouter vision model with
+   the Palmara system prompt, parses the structured reply, and persists the
+   reading + first assistant message (`status: 'complete'`), or `status: 'failed'`
+   on error. The model call is aborted at 55s so a slow reading always resolves to
+   a retryable failed state rather than hanging.
+3. **`/reading/[id]`** — shows the palm photo + sectioned reading, polls while
+   processing, and hosts the follow-up chat.
+4. **`POST /api/readings/[id]/messages`** — answers follow-ups using the original
+   reading text as context (no image re-send) plus recent chat turns.
+5. **`/r/[id]`** — the same reading, read-only, for sharing.
 
-## Deploy on Vercel
+## Deploy to Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Push this repo to GitHub.
+2. In Vercel, **New Project → Import** the repo (framework auto-detects as Next.js).
+3. Add the five environment variables above under **Settings → Environment
+   Variables** (Production + Preview).
+4. Deploy.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> The initial reading route needs up to ~60s on the free model. Vercel Hobby caps
+> serverless functions at 60s; a paid vision model returns in a few seconds and
+> removes the risk entirely. On Pro you can raise `maxDuration` in the route files.
+
+### Nice-to-haves (not built)
+
+Rate limiting on `/api/readings` (e.g. Upstash), a Vercel Cron job to prune
+readings/images past a retention window, and suggested-question chips beyond the
+default set.

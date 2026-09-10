@@ -231,11 +231,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
           </span>
         </div>
 
-        {readOnly ? (
-          <Link href="/read" className="btn-gold !py-2.5 !text-xs">
-            Get your own reading
-          </Link>
-        ) : (
+        {!readOnly && (
           <button
             type="button"
             onClick={copyShare}
