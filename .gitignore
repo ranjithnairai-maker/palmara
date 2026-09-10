@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local test assets
+/test-assets
+/public/palm-test-*
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
