@@ -7,6 +7,7 @@ import {
   OpenRouterError,
   type ChatMessage,
 } from "@/lib/openrouter";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -21,6 +22,12 @@ export async function POST(
   const { id } = await ctx.params;
   if (!isUuid(id)) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
+  const limit = await checkRateLimit("chat_message", req);
+  if (!limit.ok) {
+    const { body: errBody, init } = rateLimitedResponse(limit.retryAfterSeconds);
+    return NextResponse.json(errBody, init);
   }
 
   let body: { content?: unknown };

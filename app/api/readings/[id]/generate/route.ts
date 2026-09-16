@@ -6,6 +6,7 @@ import {
   isUuid,
 } from "@/lib/readings";
 import { generateAndPersistReading } from "@/lib/generateReading";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 
 // The vision call is the slow part. Platforms that support longer limits
 // (e.g. Vercel Pro) can raise this; the model is aborted internally at 55s
@@ -19,7 +20,7 @@ export const runtime = "nodejs";
  * button. Idempotent: a completed reading is left alone.
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   ctx: RouteContext<"/api/readings/[id]/generate">,
 ) {
   const { id } = await ctx.params;
@@ -39,6 +40,14 @@ export async function POST(
       { error: "The photo for this reading is missing — start a new one." },
       { status: 409 },
     );
+  }
+
+  // Gate here, not on the cheap /api/readings POST: this is the call that
+  // actually spends OpenRouter quota, so it's the one worth protecting.
+  const limit = await checkRateLimit("generate_reading", req);
+  if (!limit.ok) {
+    const { body: errBody, init } = rateLimitedResponse(limit.retryAfterSeconds);
+    return NextResponse.json({ id, status: reading.status, ...errBody }, init);
   }
 
   const dataUrl = await loadStoredImageAsDataUrl(reading.image_path);

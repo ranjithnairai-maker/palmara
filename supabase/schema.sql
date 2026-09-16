@@ -21,10 +21,23 @@ create table if not exists public.reading_messages (
 create index if not exists reading_messages_reading_id_created_at_idx
   on public.reading_messages (reading_id, created_at);
 
--- Lock both tables down. No policies => no anon/public access; the server's
--- service role key bypasses RLS.
+-- Server-side rate limiting store. No raw IPs — only a salted SHA-256 hash
+-- (see lib/rateLimit.ts), so this table can't be used to identify a client.
+create table if not exists public.rate_limit_hits (
+  id bigint generated always as identity primary key,
+  bucket text not null,        -- 'create_reading' | 'generate_reading' | 'chat_message'
+  client_key text not null,    -- sha256(salt + ip)
+  created_at timestamptz not null default now()
+);
+
+create index if not exists rate_limit_hits_lookup_idx
+  on public.rate_limit_hits (bucket, client_key, created_at);
+
+-- Lock all three tables down. No policies => no anon/public access; the
+-- server's service role key bypasses RLS.
 alter table public.readings enable row level security;
 alter table public.reading_messages enable row level security;
+alter table public.rate_limit_hits enable row level security;
 
 -- Private Storage bucket for palm photos (create via dashboard or this insert).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

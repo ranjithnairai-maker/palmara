@@ -6,6 +6,7 @@ import {
   uploadPalmImage,
 } from "@/lib/readings";
 import { supabaseAdmin } from "@/lib/supabase";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 
 export const maxDuration = 30;
 export const runtime = "nodejs";
@@ -19,6 +20,12 @@ const MAX_BYTES = 8 * 1024 * 1024; // 8MB hard cap server-side
  * stays well under the serverless timeout.
  */
 export async function POST(req: NextRequest) {
+  const limit = await checkRateLimit("create_reading", req);
+  if (!limit.ok) {
+    const { body: errBody, init } = rateLimitedResponse(limit.retryAfterSeconds);
+    return NextResponse.json(errBody, init);
+  }
+
   let body: { image?: unknown };
   try {
     body = await req.json();
@@ -61,12 +68,10 @@ export async function POST(req: NextRequest) {
     const imagePath = await uploadPalmImage(reading.id, decoded);
     await updateReading(reading.id, { image_path: imagePath });
   } catch (err) {
+    console.error("[api/readings] storage failure:", err);
     await supabaseAdmin.from("readings").delete().eq("id", reading.id);
     return NextResponse.json(
-      {
-        error:
-          err instanceof Error ? err.message : "Could not store the image.",
-      },
+      { error: "Could not store the image. Please try again." },
       { status: 502 },
     );
   }

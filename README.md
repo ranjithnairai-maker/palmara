@@ -32,13 +32,14 @@ Open http://localhost:3000.
 | `SUPABASE_URL` | Supabase → Project Settings → Data API → Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → `service_role`. **Server-side only. Never expose to the client.** |
 | `NEXT_PUBLIC_SITE_URL` | Optional. Canonical origin for absolute share links (e.g. `https://palmara.vercel.app`). Falls back to the Vercel URL, then the request host. |
+| `RATE_LIMIT_SALT` | Optional. Salts the IP hash used for rate limiting (`lib/rateLimit.ts`) so it can't be reversed even with DB read access. Any random string; has a safe built-in default if unset. |
 
 ### Database schema
 
 Run `supabase/schema.sql` against your project (or use the Supabase SQL editor).
-It creates the `readings` and `reading_messages` tables with RLS enabled and **no
-policies** — every read/write goes through the service role key on the server.
-Also create a **private** Storage bucket named `palm-photos`.
+It creates the `readings`, `reading_messages`, and `rate_limit_hits` tables with
+RLS enabled and **no policies** — every read/write goes through the service role
+key on the server. Also create a **private** Storage bucket named `palm-photos`.
 
 ## How it works
 
@@ -57,11 +58,21 @@ Also create a **private** Storage bucket named `palm-photos`.
    reading text as context (no image re-send) plus recent chat turns.
 5. **`/r/[id]`** — the same reading, read-only, for sharing.
 
+## Security
+
+Palmara has no accounts — see [SECURITY.md](SECURITY.md) for the full rules
+this project follows and how "access control" is adapted for a no-login app
+(short version: unguessable UUIDs, per-IP rate limiting on every endpoint
+that costs money or storage, private Storage bucket + signed URLs, RLS with
+no policies on every table, security headers + CSP, and no secrets or raw
+error detail ever reaching the client). Read it before adding a new route or
+touching anything under `lib/`.
+
 ## Deploy to Vercel
 
 1. Push this repo to GitHub.
 2. In Vercel, **New Project → Import** the repo (framework auto-detects as Next.js).
-3. Add the five environment variables above under **Settings → Environment
+3. Add the environment variables above under **Settings → Environment
    Variables** (Production + Preview).
 4. Deploy.
 
@@ -71,6 +82,6 @@ Also create a **private** Storage bucket named `palm-photos`.
 
 ### Nice-to-haves (not built)
 
-Rate limiting on `/api/readings` (e.g. Upstash), a Vercel Cron job to prune
-readings/images past a retention window, and suggested-question chips beyond the
-default set.
+A Vercel Cron job to prune readings/images past a retention window, and
+suggested-question chips beyond the default set. (Rate limiting was on this
+list originally — it's now built, see Security above.)
