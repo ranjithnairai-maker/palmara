@@ -1,7 +1,8 @@
-import type { ParsedReading } from "./types";
+import type { AnalysisJson, DetailedSections, ParsedAnalysis } from "./types";
 import { stripReasoning } from "./openrouter";
 
 const VALID_ELEMENTS = ["Earth", "Air", "Fire", "Water"];
+const LINE_KEYS = ["life", "heart", "head", "fate"] as const;
 
 function normalizeElement(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -9,6 +10,10 @@ function normalizeElement(value: unknown): string | null {
     (e) => e.toLowerCase() === value.trim().toLowerCase(),
   );
   return hit ?? null;
+}
+
+function str(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value.trim() : fallback;
 }
 
 /** Pulls the first balanced-looking JSON object out of a string. */
@@ -36,69 +41,105 @@ function extractJsonObject(text: string): string | null {
   return null;
 }
 
+function cleanReply(raw: string): string {
+  return stripReasoning(raw).replace(/```json|```/gi, "").trim();
+}
+
 /**
- * Parses the vision model's reply into a structured reading. Tolerant of
- * reasoning wrappers, code fences, and models that ignore the JSON contract
- * and just return the markdown reading.
+ * Parses the vision model's structured analysis reply. Tolerant of
+ * reasoning wrappers and code fences; if the JSON is missing or malformed
+ * for a "this is a palm" reply, still salvages an analysis with whatever
+ * line data parsed, since a partial structured reading beats none.
  */
-export function parseInitialReading(raw: string): ParsedReading {
-  const cleaned = stripReasoning(raw).replace(/```json|```/gi, "").trim();
-
+export function parseAnalysis(raw: string): ParsedAnalysis {
+  const cleaned = cleanReply(raw);
   const jsonStr = extractJsonObject(cleaned);
-  if (jsonStr) {
-    try {
-      const obj = JSON.parse(jsonStr) as Record<string, unknown>;
-      const isPalm = obj.is_palm !== false; // default to true unless explicitly false
-      const reading =
-        typeof obj.reading === "string" ? obj.reading.trim() : "";
-      const clarification =
-        typeof obj.clarification === "string" && obj.clarification.trim()
-          ? obj.clarification.trim()
-          : null;
 
-      if (!isPalm) {
-        return {
-          isPalm: false,
-          handElement: null,
-          reading: "",
-          clarification:
-            clarification ??
-            "I couldn't quite make out a palm in that photo. Try again with your hand open, palm toward the camera, in even light.",
-        };
-      }
-      if (reading) {
-        return {
-          isPalm: true,
-          handElement: normalizeElement(obj.hand_element),
-          reading,
-          clarification: null,
-        };
-      }
-    } catch {
-      // fall through to raw-markdown handling
-    }
-  }
-
-  // No usable JSON — treat the whole cleaned reply as the reading markdown.
-  const fallback = cleaned.replace(/^\{[\s\S]*$/, "").trim() || cleaned;
-  if (!fallback) {
+  if (!jsonStr) {
     return {
       isPalm: false,
-      handElement: null,
-      reading: "",
+      analysis: null,
       clarification:
         "Something got lost between the reader and the page. Please try once more.",
     };
   }
 
-  // Best-effort element sniff from the prose.
-  const elementMatch = fallback.match(
-    /\b(Earth|Air|Fire|Water)\b(?=[^.]*\b(hand|element|type)\b)/i,
-  );
-  return {
-    isPalm: true,
-    handElement: elementMatch ? normalizeElement(elementMatch[1]) : null,
-    reading: fallback,
-    clarification: null,
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(jsonStr) as Record<string, unknown>;
+  } catch {
+    return {
+      isPalm: false,
+      analysis: null,
+      clarification:
+        "Something got lost between the reader and the page. Please try once more.",
+    };
+  }
+
+  const isPalm = obj.is_palm !== false; // default to true unless explicitly false
+  if (!isPalm) {
+    const clarification = str(
+      obj.clarification,
+      "I couldn't quite make out a palm in that photo. Try again with your hand open, palm toward the camera, in even light.",
+    );
+    return { isPalm: false, analysis: null, clarification };
+  }
+
+  const linesRaw =
+    obj.lines && typeof obj.lines === "object"
+      ? (obj.lines as Record<string, unknown>)
+      : {};
+
+  const lines = {} as AnalysisJson["lines"];
+  for (const key of LINE_KEYS) {
+    const entry =
+      linesRaw[key] && typeof linesRaw[key] === "object"
+        ? (linesRaw[key] as Record<string, unknown>)
+        : {};
+    lines[key] = {
+      traits: str(entry.traits, "hard to make out clearly in this photo"),
+      takeaway: str(entry.takeaway, "worth a closer look another time"),
+    };
+  }
+
+  const analysis: AnalysisJson = {
+    hand_element: normalizeElement(obj.hand_element),
+    lines,
+    mounts: str(obj.mounts),
   };
+
+  return { isPalm: true, analysis, clarification: null };
+}
+
+/**
+ * Parses the Detailed Reading model's JSON reply into themed sections.
+ * Tolerant: returns null (not a throw) on anything unparseable so the
+ * caller can fall back to rendering the raw text as markdown prose —
+ * small/free models don't always follow strict JSON instructions.
+ */
+export function parseDetailedReading(raw: string): DetailedSections | null {
+  const cleaned = cleanReply(raw);
+  const jsonStr = extractJsonObject(cleaned);
+  if (!jsonStr) return null;
+
+  try {
+    const obj = JSON.parse(jsonStr) as Record<string, unknown>;
+    const sections: DetailedSections = {
+      handElement: str(obj.hand_element),
+      vitality: str(obj.vitality),
+      love: str(obj.love),
+      mind: str(obj.mind),
+      path: str(obj.path),
+      mounts: str(obj.mounts),
+      closing: str(obj.closing),
+    };
+    // Require the core narrative fields — a mostly-empty object isn't a
+    // usable Detailed Reading, let the caller fall back to raw text.
+    if (!sections.vitality || !sections.love || !sections.mind || !sections.path) {
+      return null;
+    }
+    return sections;
+  } catch {
+    return null;
+  }
 }

@@ -76,5 +76,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ id: reading.id, status: "processing" });
+  // owner_token is returned exactly once, here, and never again — the
+  // client is responsible for stashing it (localStorage) if it wants to be
+  // able to delete this reading later. It is never included in any GET
+  // response or page payload (see toPublicReading()).
+  return NextResponse.json({
+    id: reading.id,
+    status: "processing",
+    ownerToken: reading.owner_token,
+  });
 }

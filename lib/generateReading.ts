@@ -1,67 +1,76 @@
-import { callOpenRouter, OpenRouterError } from "./openrouter";
-import { INITIAL_READING_SYSTEM } from "./prompts";
-import { parseInitialReading } from "./parse";
-import { updateReading, addMessage } from "./readings";
+import { callOpenRouter, OpenRouterError, stripReasoning } from "./openrouter";
+import {
+  ANALYSIS_SYSTEM,
+  DETAILED_READING_SYSTEM,
+  QUICK_INSIGHTS_SYSTEM,
+} from "./prompts";
+import { parseAnalysis } from "./parse";
+import { updateReading, addMessage, getReading } from "./readings";
+import type { AnalysisJson } from "./types";
 
 export type GenerateResult =
   | { ok: true; handElement: string | null }
   | { ok: false; kind: "not_a_palm" | "rate_limited" | "model_error"; message: string };
 
+export type DetailedResult =
+  | { ok: true; detailedText: string }
+  | { ok: false; kind: "rate_limited" | "model_error" | "not_ready"; message: string };
+
+function friendlyModelError(err: unknown): { kind: "rate_limited" | "model_error"; message: string } {
+  if (err instanceof OpenRouterError && err.isRateLimit) {
+    return {
+      kind: "rate_limited",
+      message:
+        "The reader is fielding a lot of hands right now. Give it a moment and try again.",
+    };
+  }
+  return {
+    kind: "model_error",
+    message: "That didn't come through. This usually clears up on a second try.",
+  };
+}
+
 /**
- * Runs the vision model on a palm image, parses the structured reply, and
- * persists the reading + first assistant message. Sets reading status to
- * 'complete' on success or 'failed' on error. Never throws for expected
- * failure modes — returns a tagged result instead.
+ * Runs the vision model once on a palm image, parses it into structured
+ * analysis JSON, then a second (text-only, no image) call turns that JSON
+ * into the Quick Insights prose the user sees first. Persists
+ * analysis_json + reading_text (Quick Insights) + the first assistant chat
+ * message, and sets status to 'complete' or 'failed'. Never throws for
+ * expected failure modes — returns a tagged result instead.
  */
 export async function generateAndPersistReading(
   readingId: string,
   imageDataUrl: string,
 ): Promise<GenerateResult> {
-  let raw: string;
+  let rawAnalysis: string;
   try {
-    raw = await callOpenRouter({
+    rawAnalysis = await callOpenRouter({
       messages: [
-        { role: "system", content: INITIAL_READING_SYSTEM },
+        { role: "system", content: ANALYSIS_SYSTEM },
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: "Here is my palm. Please read it.",
-            },
+            { type: "text", text: "Here is my palm. Please analyze it." },
             { type: "image_url", image_url: { url: imageDataUrl } },
           ],
         },
       ],
-      temperature: 0.85,
-      maxTokens: 1700,
+      temperature: 0.7,
+      maxTokens: 1400,
     });
   } catch (err) {
     await updateReading(readingId, { status: "failed" }).catch(() => {});
-    if (err instanceof OpenRouterError && err.isRateLimit) {
-      return {
-        ok: false,
-        kind: "rate_limited",
-        message:
-          "The reader is fielding a lot of hands right now. Give it a moment and try again.",
-      };
-    }
-    return {
-      ok: false,
-      kind: "model_error",
-      message:
-        "The reading didn't come through. This usually clears up on a second try.",
-    };
+    return { ok: false, ...friendlyModelError(err) };
   }
 
-  const parsed = parseInitialReading(raw);
+  const parsed = parseAnalysis(rawAnalysis);
 
-  if (!parsed.isPalm) {
+  if (!parsed.isPalm || !parsed.analysis) {
     const message =
       parsed.clarification ??
       "I couldn't quite make out a palm there. Try again with your hand open, palm to the camera, in even light.";
     // Stash the reason in reading_text so the reading page can show it
-    // (the fixed schema has no dedicated error column).
+    // (the schema has no dedicated error column).
     await updateReading(readingId, {
       status: "failed",
       reading_text: `NOT_A_PALM: ${message}`,
@@ -69,12 +78,89 @@ export async function generateAndPersistReading(
     return { ok: false, kind: "not_a_palm", message };
   }
 
+  const analysis = parsed.analysis;
+
+  let quickInsights: string;
+  try {
+    const raw = await callOpenRouter({
+      messages: [
+        { role: "system", content: QUICK_INSIGHTS_SYSTEM },
+        { role: "user", content: JSON.stringify(analysis) },
+      ],
+      temperature: 0.85,
+      maxTokens: 700,
+    });
+    quickInsights = stripReasoning(raw) || raw.trim();
+  } catch (err) {
+    // The (expensive) image analysis already succeeded — don't discard it.
+    // Fall back to a plain-language stitch of the analysis so the reading
+    // still completes; the user can always ask chat for more.
+    quickInsights = fallbackQuickInsights(analysis);
+    void err;
+  }
+
   await updateReading(readingId, {
     status: "complete",
-    reading_text: parsed.reading,
-    hand_element: parsed.handElement,
+    reading_text: quickInsights.trim(),
+    hand_element: analysis.hand_element,
+    analysis_json: analysis,
   });
-  await addMessage(readingId, "assistant", parsed.reading);
+  await addMessage(readingId, "assistant", quickInsights.trim());
 
-  return { ok: true, handElement: parsed.handElement };
+  return { ok: true, handElement: analysis.hand_element };
+}
+
+function fallbackQuickInsights(analysis: AnalysisJson): string {
+  const { lines } = analysis;
+  return [
+    analysis.hand_element
+      ? `Your hand reads as ${analysis.hand_element} in shape — steady ground for the four lines that follow.`
+      : `Your hand's shape was hard to place with confidence, but the four lines still had plenty to say.`,
+    `**Life Line.** ${lines.life.takeaway}`,
+    `**Heart Line.** ${lines.heart.takeaway}`,
+    `**Head Line.** ${lines.head.takeaway}`,
+    `**Fate Line.** ${lines.fate.takeaway}`,
+    `There's more waiting whenever you're ready for the full reading.`,
+  ].join("\n\n");
+}
+
+/**
+ * Generates the Detailed Reading from the already-stored analysis_json —
+ * no image re-sent. Idempotent: if detailed_text already exists, returns it
+ * without calling the model again.
+ */
+export async function generateDetailedReading(readingId: string): Promise<DetailedResult> {
+  const reading = await getReading(readingId);
+  if (!reading || reading.status !== "complete" || !reading.analysis_json) {
+    return {
+      ok: false,
+      kind: "not_ready",
+      message: "This reading isn't ready for the full version yet.",
+    };
+  }
+  if (reading.detailed_text) {
+    return { ok: true, detailedText: reading.detailed_text };
+  }
+
+  let raw: string;
+  try {
+    raw = await callOpenRouter({
+      messages: [
+        { role: "system", content: DETAILED_READING_SYSTEM },
+        { role: "user", content: JSON.stringify(reading.analysis_json) },
+      ],
+      temperature: 0.85,
+      maxTokens: 2200,
+    });
+  } catch (err) {
+    return { ok: false, ...friendlyModelError(err) };
+  }
+
+  // Store whatever the model returned (JSON is preferred for themed
+  // rendering; parseDetailedReading() falls back gracefully on the render
+  // side if it isn't valid JSON) — never silently drop a real reply.
+  const cleaned = stripReasoning(raw) || raw.trim();
+  const detailedText = cleaned;
+  await updateReading(readingId, { detailed_text: detailedText });
+  return { ok: true, detailedText };
 }

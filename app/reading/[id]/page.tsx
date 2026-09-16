@@ -2,12 +2,16 @@ import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ReadingView } from "@/components/ReadingView";
+import { RemovedNotice } from "@/components/RemovedNotice";
 import {
   getReading,
   getMessages,
   getSignedImageUrl,
   isUuid,
+  isDeletedReading,
+  toPublicReading,
 } from "@/lib/readings";
+import { parseDetailedReading } from "@/lib/parse";
 import type { ReadingPayload } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +33,20 @@ export default async function ReadingPage(props: PageProps<"/reading/[id]">) {
   if (!isUuid(id)) notFound();
 
   const reading = await getReading(id);
-  if (!reading) notFound();
+  if (!reading) {
+    if (await isDeletedReading(id)) {
+      return (
+        <>
+          <SiteHeader />
+          <main className="relative z-10 mx-auto w-full max-w-2xl flex-1 px-6 py-10">
+            <RemovedNotice />
+          </main>
+          <SiteFooter />
+        </>
+      );
+    }
+    notFound();
+  }
 
   const [messages, imageUrl] = await Promise.all([
     getMessages(id),
@@ -38,7 +55,14 @@ export default async function ReadingPage(props: PageProps<"/reading/[id]">) {
       : Promise.resolve(null),
   ]);
 
-  const payload: ReadingPayload = { reading, messages, imageUrl };
+  const payload: ReadingPayload = {
+    reading: toPublicReading(reading),
+    messages,
+    imageUrl,
+    detailedSections: reading.detailed_text
+      ? parseDetailedReading(reading.detailed_text)
+      : null,
+  };
 
   return (
     <>

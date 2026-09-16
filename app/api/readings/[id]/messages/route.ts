@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getReading, getMessages, addMessage, isUuid } from "@/lib/readings";
 import { buildChatSystemPrompt } from "@/lib/prompts";
+import { parseDetailedReading } from "@/lib/parse";
 import {
   callOpenRouter,
   stripReasoning,
@@ -71,7 +72,14 @@ export async function POST(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildChatSystemPrompt(reading.reading_text, reading.hand_element),
+      content: buildChatSystemPrompt({
+        quickInsights: reading.reading_text,
+        handElement: reading.hand_element,
+        analysis: reading.analysis_json,
+        detailedSections: reading.detailed_text
+          ? parseDetailedReading(reading.detailed_text)
+          : null,
+      }),
     },
     ...history.map<ChatMessage>((m) => ({
       role: m.role,

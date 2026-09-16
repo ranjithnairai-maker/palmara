@@ -64,19 +64,34 @@ around.
 1. **Unguessability.** Reading ids are `gen_random_uuid()` (v4) — 122 bits
    of randomness. Not brute-forceable.
 2. **Rate limiting** (`lib/rateLimit.ts`), enforced server-side per hashed
-   client IP, on every endpoint that costs money or storage:
+   client IP, on every endpoint that costs money, storage, or is otherwise
+   abusable:
    - `POST /api/readings` (create): 5/min, 20/hour
    - `POST /api/readings/[id]/generate` (the OpenRouter vision call — the
-     expensive one): 4/min, 15/hour
+     expensive one, run once per reading): 4/min, 15/hour
+   - `POST /api/readings/[id]/detailed` (text-only, on demand, idempotent
+     once generated): 4/min, 20/hour
    - `POST /api/readings/[id]/messages` (chat): 10/min, 60/hour
+   - `DELETE /api/readings/[id]` (no OpenRouter cost, but the one
+     irreversible write in the app, gated only by `owner_token` — rate
+     limiting is defense-in-depth against token guessing): 6/min, 20/hour
    Limits fail **open** on an infra error (a rate-limit outage should never
    block a real user), and store a **salted SHA-256 hash** of the IP, never
    the raw address.
 3. **Private storage.** The `palm-photos` bucket is private; images are only
    ever served via short-lived (1h) signed URLs generated server-side.
 4. **RLS with no policies** on every table (`readings`, `reading_messages`,
-   `rate_limit_hits`) — the anon/publishable key can do nothing; all access
-   is via the service role key inside Route Handlers.
+   `rate_limit_hits`, `deleted_readings`) — the anon/publishable key can do
+   nothing; all access is via the service role key inside Route Handlers.
+5. **Owner-token deletion**, the app's one real authorization boundary.
+   There are no accounts, so a reading's `owner_token` (a `gen_random_uuid()`,
+   returned exactly once, in the `POST /api/readings` response) is what
+   proves the request to delete it came from its creator. It's compared with
+   `ownerTokenMatches()` (`lib/readings.ts`) using `crypto.timingSafeEqual`
+   over SHA-256 digests of both sides, not a plain `===`, so response timing
+   can't be used to narrow a guess. The client stashes it in `localStorage`;
+   losing that storage means losing the ability to self-delete, by design —
+   there's a footer contact link as the manual fallback.
 
 ## Code Quality & Safety
 
@@ -113,7 +128,7 @@ list, not just add code.
 
 | Risk | Status here |
 | --- | --- |
-| A01 Broken Access Control | No accounts by design; mitigated by unguessable UUIDs + rate limiting (see above). Every write validates the target row exists and is in the expected state before acting on it. |
+| A01 Broken Access Control | No accounts by design; mitigated by unguessable UUIDs + rate limiting (see above). The one exception — deleting a reading — is gated by a timing-safe `owner_token` comparison, the app's real authorization boundary; the "hidden unless your browser has the token" UI is cosmetic, not the enforcement. Every write validates the target row exists and is in the expected state before acting on it. |
 | A02 Cryptographic Failures | No passwords or payment data stored. Secrets are env-var only. IPs are hashed, not stored raw, in the rate-limit table. All traffic is HTTPS (enforced by Vercel + HSTS header). |
 | A03 Injection | All DB access via the Supabase client's parameterized builder — no string-built SQL anywhere in the app. User content rendered in chat is either plain-text (`<p>{content}</p>`, React-escaped) or passed through `react-markdown` **without** `rehype-raw`, so raw HTML/script in a message can't execute. |
 | A04 Insecure Design | Reading generation is idempotent and re-entrant (safe to retry); failures degrade to a retryable `failed` status rather than a stuck or duplicated state. |

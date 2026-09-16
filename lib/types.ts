@@ -2,14 +2,52 @@ export type ReadingStatus = "processing" | "complete" | "failed";
 
 export type HandElement = "Earth" | "Air" | "Fire" | "Water";
 
+export interface AnalysisLine {
+  traits: string;
+  takeaway: string;
+}
+
+/** Structured output of the (single) vision-model analysis call. */
+export interface AnalysisJson {
+  hand_element: string | null;
+  lines: {
+    life: AnalysisLine;
+    heart: AnalysisLine;
+    head: AnalysisLine;
+    fate: AnalysisLine;
+  };
+  mounts: string;
+}
+
+/** Structured output of the on-demand Detailed Reading call. */
+export interface DetailedSections {
+  handElement: string;
+  vitality: string;
+  love: string;
+  mind: string;
+  path: string;
+  mounts: string;
+  closing: string;
+}
+
 export interface Reading {
   id: string;
   created_at: string;
-  image_path: string;
+  image_path: string | null;
   hand_element: string | null;
+  /** Quick Insights prose (markdown). Repurposed from the original single-tier reading. */
   reading_text: string;
   status: ReadingStatus;
+  analysis_json: AnalysisJson | null;
+  /** Detailed Reading — raw text (usually JSON-encoded DetailedSections); null until revealed. */
+  detailed_text: string | null;
+  /** Proves ownership for manual delete. Server-only — never sent to the client after creation. */
+  owner_token: string;
+  image_deleted_at: string | null;
 }
+
+/** Reading shape safe to send to any viewer — owner_token stripped. */
+export type PublicReading = Omit<Reading, "owner_token">;
 
 export interface ReadingMessage {
   id: string;
@@ -19,19 +57,23 @@ export interface ReadingMessage {
   created_at: string;
 }
 
-/** Shape returned by GET /api/readings/[id] */
+/** Shape returned by GET /api/readings/[id] and rendered by ReadingView. */
 export interface ReadingPayload {
-  reading: Reading;
+  reading: PublicReading;
   messages: ReadingMessage[];
   imageUrl: string | null;
+  /** Detailed Reading, pre-parsed server-side (lib/parse.ts is server-only —
+   * see CLAUDE.md conventions). Null if not yet generated, or if the raw
+   * detailed_text didn't parse as structured JSON (client then falls back
+   * to rendering reading.detailed_text as plain markdown). */
+  detailedSections: DetailedSections | null;
   /** Present when status is 'failed' — a friendly reason for the UI. */
   failureReason?: string | null;
 }
 
-/** Parsed result of the vision model's structured reply. */
-export interface ParsedReading {
+/** Parsed result of the vision model's structured analysis reply. */
+export interface ParsedAnalysis {
   isPalm: boolean;
-  handElement: string | null;
-  reading: string;
+  analysis: AnalysisJson | null;
   clarification: string | null;
 }

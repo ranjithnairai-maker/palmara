@@ -28,44 +28,99 @@ runs TypeScript and fails on any type error.
 
 ## Architecture
 
-- **Two-phase reading creation**, not one blocking call:
+- **Three-call reading pipeline, one image analysis.** The palm photo is
+  only ever sent to the vision model once:
   1. `POST /api/readings` — validates + stores the image, inserts a
-     `readings` row (`status: 'processing'`), returns `{ id }` fast (~2s).
+     `readings` row (`status: 'processing'`), returns `{ id, ownerToken }`
+     fast (~2s). `ownerToken` is returned **exactly once, here** — see the
+     Manual Delete section below.
   2. `POST /api/readings/[id]/generate` — fired fire-and-forget by the
-     client right after, and by the reading page's retry button. Does the
-     slow OpenRouter vision call. **Idempotent** — safe to call again on a
-     non-`complete` reading; a no-op on a `complete` one.
+     client right after, and by the reading page's retry button. Calls the
+     vision model once, parses its reply into `analysis_json`, then makes a
+     second, **text-only** call (no image) that turns that JSON into the
+     Quick Insights prose stored in `reading_text`. Sets `status:
+     'complete'`. **Idempotent** — a no-op on an already-`complete` reading.
+  3. `POST /api/readings/[id]/detailed` — triggered on demand by the
+     "Reveal Your Full Reading" button. Text-only call (no image, no
+     re-analysis) that expands `analysis_json` into `detailed_text`.
+     **Idempotent** — returns the stored value without calling the model
+     again if `detailed_text` already exists.
   This split exists because the free vision model can take 40–65s, which is
   too close to Vercel's function timeout to do synchronously in the create
-  request. Don't collapse these back into one call.
+  request — and because Detailed Reading being optional means most readings
+  never pay for that second text call at all. Don't collapse these back
+  into fewer calls, and don't let Detailed re-send the image.
 - **`lib/openrouter.ts`** wraps the Chat Completions call. It classifies
   errors as rate-limited by **pattern-matching the error text**, not just
   HTTP 429 — the free model's upstream (Nvidia) returns capacity errors as a
   200/502 with `"ResourceExhausted: ... limit reached"` in the body. If you
   see a new failure mode that's really "try again shortly," add its pattern
   to `looksLikeCapacityError()` rather than inventing a new error path.
-- **`lib/generateReading.ts` / `lib/parse.ts`** — parses the vision model's
-  reply. The model is asked for a JSON envelope (`is_palm`, `hand_element`,
-  `reading`, `clarification`) but `parse.ts` is deliberately tolerant of a
-  model that ignores that contract and just returns markdown prose — it
-  falls back to treating the whole cleaned reply as the reading. Keep that
-  fallback if you touch this file; small/free models don't always follow
-  strict JSON instructions.
+- **`lib/generateReading.ts` / `lib/parse.ts`** — `parseAnalysis()` parses
+  the vision model's reply into `AnalysisJson` (per-line `traits` +
+  `takeaway`, `mounts`); `parseDetailedReading()` parses the Detailed
+  Reading model's reply into themed `DetailedSections`. Both are
+  deliberately **tolerant**: `parseAnalysis` salvages whatever line data it
+  can from malformed JSON rather than failing the whole reading, and
+  `parseDetailedReading` returns `null` (never throws) on anything
+  unparseable so the UI falls back to rendering the raw text as plain
+  markdown. Keep both fallbacks if you touch this file — small/free models
+  don't always follow strict JSON instructions. `parse.ts` imports
+  `lib/openrouter.ts`, so it inherits that module's server-only rule (see
+  Conventions) — never import it from a `"use client"` file; compute
+  `detailedSections` server-side and pass it down via `ReadingPayload`
+  instead (see the API routes and page Server Components for the pattern).
 - **`lib/prompts.ts`** — the persona + guardrails (no medical/death/legal
-  claims presented as fact) live in `PALMARA_PERSONA`, shared by both the
-  initial reading prompt and the follow-up chat prompt. Edit the shared
-  block, not each prompt separately, or the two will drift.
-- **`ReadingView.tsx`** renders three states (`processing` polls every 3s,
-  `failed` offers retry via `/generate`, `complete` shows reading + chat) and
-  is reused, with a `readOnly` prop, by both `/reading/[id]` (the creator's
-  view) and `/r/[id]` (the public share view — same id, no chat input, no
-  copy-link). There is no auth distinguishing these two routes — `readOnly`
-  is just a UI mode, not a security boundary. Don't rely on it as one.
+  claims presented as fact, plus the warm/gentle/never-clinical voice
+  requirement) live in `PALMARA_PERSONA`, shared by `ANALYSIS_SYSTEM`,
+  `QUICK_INSIGHTS_SYSTEM`, `DETAILED_READING_SYSTEM`, and the chat prompt.
+  Edit the shared block, not each prompt separately, or they'll drift.
+  `buildChatSystemPrompt()` grounds every chat answer in the full
+  `analysis_json` (and `detailed_text`, once generated) regardless of which
+  tier the viewer is currently looking at — never let a chat answer say
+  "reveal the full reading to see that."
+- **`ReadingView.tsx`** renders three top-level states (`processing` polls
+  every 3s, `failed` offers retry via `/generate`, `complete` shows the
+  tiered reading + chat) and is reused, with a `readOnly` prop, by both
+  `/reading/[id]` (the creator's view) and `/r/[id]` (the public share view
+  — same id, no chat input, no copy-link). There is no auth distinguishing
+  these two routes — `readOnly` is just a UI mode, not a security boundary.
+  Don't rely on it as one. Within the `complete` state: Quick Insights
+  always renders; the Detailed section renders from `detailedSections` if
+  present (falling back to raw `reading.detailed_text` as markdown if it
+  didn't parse), otherwise a "Reveal Your Full Reading" CTA calls
+  `/detailed`. `TipJar` (visible to everyone) and `DeleteReadingControl`
+  (owner-only, checked via `localStorage`) are separate components composed
+  in, not inlined — keep it that way if you touch this file, it's already
+  large.
 - **`lib/rateLimit.ts`** — Supabase-backed sliding-window rate limiter (no
   in-memory state; Vercel functions don't share memory across invocations).
-  Every route that calls OpenRouter or writes to storage must call
-  `checkRateLimit(bucket, req)` before doing that work. See SECURITY.md for
-  the bucket list and limits.
+  Every route that calls OpenRouter, writes to storage, or performs the
+  owner-token delete must call `checkRateLimit(bucket, req)` before doing
+  that work. See SECURITY.md for the bucket list and limits.
+- **Manual delete (`DELETE /api/readings/[id]`)** — the only real
+  authorization boundary in the app. `owner_token` (a `gen_random_uuid()`
+  column) is returned once at creation, stashed client-side in
+  `localStorage`, and compared server-side with `ownerTokenMatches()`
+  (`lib/readings.ts`, timing-safe). A successful delete removes the stored
+  image, inserts a row into `deleted_readings` (a tombstone — see below),
+  then deletes the `readings` row (cascades to `reading_messages`).
+- **`deleted_readings` tombstone.** The app can't tell "never existed" from
+  "existed and was deleted" once a row is gone, but the UI needs to show a
+  friendly "removed by its owner" message instead of a generic 404 for the
+  latter. `isDeletedReading(id)` (`lib/readings.ts`) checks this table;
+  both `/reading/[id]` and `/r/[id]` call it when `getReading()` returns
+  null, before falling through to `notFound()`.
+- **90-day image retention.** `pruneExpiredImages()` (`lib/readings.ts`),
+  run daily by the Vercel Cron job defined in `vercel.json` hitting
+  `GET /api/cron/prune-images` (protected by `CRON_SECRET` when set) —
+  deletes the Storage object and clears `image_path` for any reading past
+  the retention window, setting `image_deleted_at`. Never touches
+  `analysis_json`, `reading_text`, `detailed_text`, or chat history — only
+  the photo ages out. `ReadingView` checks `image_deleted_at` (not just a
+  null `imageUrl`, which can also mean a transient fetch error) to decide
+  whether to show the "aged out" placeholder vs. a generic "image
+  unavailable" state.
 
 ## Conventions
 

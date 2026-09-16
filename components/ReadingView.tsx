@@ -8,10 +8,15 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MysticLoader } from "./MysticLoader";
 import { PalmMarkdown } from "./PalmMarkdown";
+import { PalmGlyph } from "./PalmGlyph";
+import { SectionGlyph } from "./SectionGlyph";
+import { TipJar } from "./TipJar";
+import { DeleteReadingControl } from "./DeleteReadingControl";
 import { SUGGESTED_QUESTIONS } from "@/lib/prompts";
-import type { ReadingMessage, ReadingPayload } from "@/lib/types";
+import type { DetailedSections, ReadingMessage, ReadingPayload } from "@/lib/types";
 
 type Props = {
   initial: ReadingPayload;
@@ -20,11 +25,19 @@ type Props = {
   readOnly?: boolean;
 };
 
-export function ReadingView({ initial, shareId, readOnly = false }: Props) {
-  const [payload, setPayload] = useState<ReadingPayload>(initial);
-  const { reading } = payload;
+const THEMES: { key: keyof Omit<DetailedSections, "handElement" | "mounts" | "closing">; title: string }[] = [
+  { key: "vitality", title: "Vitality" },
+  { key: "love", title: "Love" },
+  { key: "mind", title: "Mind" },
+  { key: "path", title: "Path" },
+];
 
-  // Chat state (skip messages[0] — that's the full reading, shown above).
+export function ReadingView({ initial, shareId, readOnly = false }: Props) {
+  const router = useRouter();
+  const [payload, setPayload] = useState<ReadingPayload>(initial);
+  const { reading, detailedSections } = payload;
+
+  // Chat state (skip messages[0] — that's Quick Insights, shown above).
   const [chat, setChat] = useState<ReadingMessage[]>(() =>
     payload.messages.slice(1),
   );
@@ -34,6 +47,8 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [waitedTooLong, setWaitedTooLong] = useState(false);
+  const [revealing, setRevealing] = useState(false);
+  const [detailedError, setDetailedError] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
   const refetch = useCallback(async () => {
@@ -127,6 +142,28 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
     }
   }
 
+  async function revealDetailed() {
+    setRevealing(true);
+    setDetailedError(null);
+    try {
+      const res = await fetch(`/api/readings/${shareId}/detailed`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDetailedError(data.error ?? "That didn't come through. Try again.");
+        return;
+      }
+      setPayload((p) => ({
+        ...p,
+        reading: { ...p.reading, detailed_text: data.detailedText ?? p.reading.detailed_text },
+        detailedSections: data.detailedSections ?? null,
+      }));
+    } catch {
+      setDetailedError("Network trouble reaching the reader. Try again.");
+    } finally {
+      setRevealing(false);
+    }
+  }
+
   async function copyShare() {
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -215,6 +252,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
     day: "numeric",
     year: "numeric",
   });
+  const hasDetailed = Boolean(reading.detailed_text);
 
   return (
     <div className="animate-fade-up">
@@ -253,6 +291,13 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
                 alt="The palm that was read"
                 className="w-full rounded-lg object-contain"
               />
+            ) : reading.image_deleted_at ? (
+              <div className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-4 rounded-lg bg-black/30 p-6 text-center">
+                <PalmGlyph className="w-16 opacity-40" />
+                <p className="text-xs leading-relaxed text-cream-faint">
+                  the original photo has aged out, but the reading remains
+                </p>
+              </div>
             ) : (
               <div className="grid aspect-[3/4] w-full place-items-center rounded-lg bg-black text-xs text-cream-faint">
                 image unavailable
@@ -268,10 +313,86 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
 
         {/* Reading + chat */}
         <div>
-          <p className="eyebrow">The reading</p>
+          <p className="eyebrow">Quick Insights</p>
           <div className="mt-3">
             <PalmMarkdown>{reading.reading_text}</PalmMarkdown>
           </div>
+
+          {!hasDetailed && (
+            <div className="mt-10 rounded-2xl border border-[rgba(217,178,94,0.3)] bg-[rgba(61,31,79,0.25)] p-8 text-center">
+              <p className="eyebrow">There is more</p>
+              <h3 className="mt-2 font-serif text-xl text-cream">
+                Reveal Your Full Reading
+              </h3>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-cream-muted">
+                An unhurried telling of your hand — Vitality, Love, Mind, and
+                Path, woven into one fuller reflection.
+              </p>
+              <button
+                type="button"
+                onClick={revealDetailed}
+                disabled={revealing}
+                className="btn-gold mt-6 disabled:opacity-60"
+              >
+                {revealing ? "Revealing…" : "Reveal Your Full Reading"}
+              </button>
+              {detailedError && (
+                <p className="mt-3 text-xs text-[#f0c9c9]">{detailedError}</p>
+              )}
+            </div>
+          )}
+
+          {hasDetailed && (
+            <div className="mt-12 animate-fade-up">
+              <hr className="hairline mb-10" />
+              <p className="eyebrow">Your Full Reading</p>
+
+              {detailedSections ? (
+                <>
+                  <div className="mt-4">
+                    <PalmMarkdown>{detailedSections.handElement}</PalmMarkdown>
+                  </div>
+
+                  {THEMES.map((theme) => (
+                    <div key={theme.key} className="mt-10">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[rgba(217,178,94,0.4)] bg-[rgba(61,31,79,0.35)] text-gold">
+                          <SectionGlyph kind={theme.key} className="h-4.5 w-4.5" />
+                        </span>
+                        <h3 className="font-serif text-xl tracking-wide text-gold-bright">
+                          {theme.title}
+                        </h3>
+                      </div>
+                      <hr className="hairline mb-4 mt-3 max-w-[6rem]" />
+                      <PalmMarkdown>{detailedSections[theme.key]}</PalmMarkdown>
+                    </div>
+                  ))}
+
+                  {detailedSections.mounts && (
+                    <div className="mt-10">
+                      <p className="eyebrow !text-[0.65rem]">Mounts</p>
+                      <div className="mt-2">
+                        <PalmMarkdown>{detailedSections.mounts}</PalmMarkdown>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-10 rounded-2xl border border-[rgba(217,178,94,0.2)] bg-[rgba(61,31,79,0.2)] p-6">
+                    <PalmMarkdown>{detailedSections.closing}</PalmMarkdown>
+                  </div>
+                </>
+              ) : (
+                // Model didn't return valid structured JSON — fall back to
+                // rendering whatever it returned as plain markdown, same
+                // tolerant-parsing philosophy as the rest of the app.
+                <div className="mt-4">
+                  <PalmMarkdown>{reading.detailed_text ?? ""}</PalmMarkdown>
+                </div>
+              )}
+            </div>
+          )}
+
+          <TipJar />
 
           <hr className="hairline my-10" />
 
@@ -389,6 +510,8 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
           )}
         </div>
       </div>
+
+      <DeleteReadingControl shareId={shareId} onDeleted={() => router.replace("/")} />
     </div>
   );
 }

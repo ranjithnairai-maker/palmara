@@ -33,6 +33,19 @@ const RULES: Record<string, RateLimitRule[]> = {
     { windowMs: 60_000, max: 10 },
     { windowMs: 60 * 60_000, max: 60 },
   ],
+  // Text-only model call, on demand, once per reading (idempotent) — cheaper
+  // than generate_reading but still real OpenRouter spend.
+  detailed_reading: [
+    { windowMs: 60_000, max: 4 },
+    { windowMs: 60 * 60_000, max: 20 },
+  ],
+  // No OpenRouter cost, but this is the one destructive/irreversible write
+  // in the app and the owner_token check is its only real gate — limiting
+  // attempts is cheap defense-in-depth against token guessing.
+  delete_reading: [
+    { windowMs: 60_000, max: 6 },
+    { windowMs: 60 * 60_000, max: 20 },
+  ],
 };
 
 export function getClientIp(req: Request): string {

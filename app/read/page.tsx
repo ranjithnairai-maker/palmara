@@ -125,6 +125,17 @@ export default function ReadPage() {
         return;
       }
 
+      // Stash the owner token so this browser can delete the reading later.
+      // Best-effort: a private window or blocked storage just means no
+      // delete control shows up, nothing else in the flow depends on it.
+      if (data.ownerToken) {
+        try {
+          localStorage.setItem(`palmara_owner_${data.id}`, data.ownerToken);
+        } catch {
+          /* storage unavailable — delete control just won't show later */
+        }
+      }
+
       // 2. Kick off the slow vision call without blocking navigation.
       //    keepalive lets it survive the route change.
       fetch(`/api/readings/${data.id}/generate`, {

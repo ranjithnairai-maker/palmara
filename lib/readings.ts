@@ -1,7 +1,9 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin, PALM_BUCKET } from "./supabase";
-import type { Reading, ReadingMessage } from "./types";
+import type { AnalysisJson, PublicReading, Reading, ReadingMessage } from "./types";
 
 const SIGNED_URL_TTL = 60 * 60; // 1 hour
+const RETENTION_DAYS = 90;
 
 export interface DecodedImage {
   buffer: Buffer;
@@ -56,7 +58,16 @@ export async function createReading(imagePath: string): Promise<Reading> {
 export async function updateReading(
   id: string,
   patch: Partial<
-    Pick<Reading, "hand_element" | "reading_text" | "status" | "image_path">
+    Pick<
+      Reading,
+      | "hand_element"
+      | "reading_text"
+      | "status"
+      | "image_path"
+      | "analysis_json"
+      | "detailed_text"
+      | "image_deleted_at"
+    >
   >,
 ): Promise<void> {
   const { error } = await supabaseAdmin
@@ -88,6 +99,25 @@ export async function getReading(id: string): Promise<Reading | null> {
     .maybeSingle();
   if (error) throw new Error(`Fetch reading failed: ${error.message}`);
   return (data as Reading) ?? null;
+}
+
+/** Strips owner_token before a reading is sent to any client — every route
+ * that builds a ReadingPayload must go through this, never send the raw row. */
+export function toPublicReading(reading: Reading): PublicReading {
+  const { owner_token: _owner_token, ...rest } = reading;
+  void _owner_token;
+  return rest;
+}
+
+/** Constant-time-ish ownership check: compares SHA-256 digests (fixed
+ * length) rather than the raw tokens, so response timing can't be used to
+ * narrow down a guess. This is the one real authorization boundary in an
+ * app with no accounts, so it's worth the few extra lines. */
+export function ownerTokenMatches(stored: string, supplied: unknown): boolean {
+  if (typeof supplied !== "string" || !supplied) return false;
+  const a = createHash("sha256").update(stored).digest();
+  const b = createHash("sha256").update(supplied).digest();
+  return timingSafeEqual(a, b);
 }
 
 export async function getMessages(readingId: string): Promise<ReadingMessage[]> {
@@ -137,3 +167,72 @@ export function isUuid(value: string): boolean {
     value,
   );
 }
+
+/**
+ * Owner-initiated delete: removes the stored image (if any), records a
+ * tombstone so the id's URL can show a friendly "removed" message instead
+ * of an indistinguishable 404, then deletes the readings row — cascading
+ * to reading_messages via the existing `on delete cascade`.
+ */
+export async function deleteReadingCompletely(reading: Reading): Promise<void> {
+  if (reading.image_path && reading.image_path !== "pending") {
+    await supabaseAdmin.storage
+      .from(PALM_BUCKET)
+      .remove([reading.image_path])
+      .catch(() => {});
+  }
+  const { error: tombstoneError } = await supabaseAdmin
+    .from("deleted_readings")
+    .insert({ id: reading.id });
+  if (tombstoneError) {
+    throw new Error(`Tombstone insert failed: ${tombstoneError.message}`);
+  }
+  const { error } = await supabaseAdmin
+    .from("readings")
+    .delete()
+    .eq("id", reading.id);
+  if (error) throw new Error(`Delete reading failed: ${error.message}`);
+}
+
+/** True if this id belonged to a reading its owner deleted. */
+export async function isDeletedReading(id: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("deleted_readings")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return false;
+  return !!data;
+}
+
+/**
+ * Retention job: for readings older than 90 days with a still-present
+ * image, deletes the Storage object and clears image_path — everything
+ * else (analysis, Quick Insights, Detailed Reading, chat history) is left
+ * untouched. Called from the daily Vercel Cron route.
+ */
+export async function pruneExpiredImages(): Promise<{ pruned: number; checked: number }> {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("readings")
+    .select("id, image_path")
+    .lt("created_at", cutoff)
+    .is("image_deleted_at", null)
+    .not("image_path", "is", null);
+  if (error) throw new Error(`Prune query failed: ${error.message}`);
+
+  const rows = (data as Pick<Reading, "id" | "image_path">[]) ?? [];
+  let pruned = 0;
+  for (const row of rows) {
+    if (!row.image_path || row.image_path === "pending") continue;
+    await supabaseAdmin.storage.from(PALM_BUCKET).remove([row.image_path]).catch(() => {});
+    const { error: updateError } = await supabaseAdmin
+      .from("readings")
+      .update({ image_path: null, image_deleted_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (!updateError) pruned++;
+  }
+  return { pruned, checked: rows.length };
+}
+
+export type { AnalysisJson };
