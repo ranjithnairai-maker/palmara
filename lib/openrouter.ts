@@ -14,8 +14,21 @@ export class OpenRouterError extends Error {
     super(message);
     this.name = "OpenRouterError";
     this.status = status;
-    this.isRateLimit = status === 429;
+    this.isRateLimit = status === 429 || looksLikeCapacityError(message);
   }
+}
+
+/**
+ * OpenRouter/upstream providers don't always signal capacity limits with a
+ * clean HTTP 429 — a shared free model can also come back as a 200 or 502
+ * with an error payload like "ResourceExhausted: Worker local total request
+ * limit reached (16/16)". Treat those the same as a rate limit so the UI
+ * shows "try again shortly" instead of a generic failure.
+ */
+function looksLikeCapacityError(text: string): boolean {
+  return /resourceexhausted|resource_exhausted|rate.?limit|too many requests|request limit|quota exceeded|overloaded|worker.*limit reached/i.test(
+    text,
+  );
 }
 
 // OpenAI-compatible message content
@@ -39,13 +52,29 @@ interface CallOptions {
 /**
  * Calls OpenRouter's Chat Completions endpoint and returns the assistant's
  * text. Server-side only — reads OPENROUTER_API_KEY from the environment.
+ * Retries once on a transient capacity error (a shared free model's worker
+ * pool is often unstuck within a couple seconds) as long as time remains
+ * within the overall timeout budget.
  */
-export async function callOpenRouter({
-  messages,
-  timeoutMs = 55_000,
-  temperature = 0.8,
-  maxTokens = 1600,
-}: CallOptions): Promise<string> {
+export async function callOpenRouter(opts: CallOptions): Promise<string> {
+  const deadline = Date.now() + (opts.timeoutMs ?? 55_000);
+  try {
+    return await callOpenRouterOnce(opts, deadline);
+  } catch (err) {
+    const remaining = deadline - Date.now();
+    if (err instanceof OpenRouterError && err.isRateLimit && remaining > 8_000) {
+      await new Promise((r) => setTimeout(r, 2_500));
+      return callOpenRouterOnce(opts, deadline);
+    }
+    throw err;
+  }
+}
+
+async function callOpenRouterOnce(
+  { messages, temperature = 0.8, maxTokens = 1600 }: CallOptions,
+  deadline: number,
+): Promise<string> {
+  const timeoutMs = Math.max(1000, deadline - Date.now());
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     throw new OpenRouterError("OPENROUTER_API_KEY is not set", 500);
