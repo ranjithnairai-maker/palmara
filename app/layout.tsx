@@ -15,13 +15,32 @@ const inter = Inter({
   display: "swap",
 });
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  (process.env.VERCEL_PROJECT_PRODUCTION_URL
-    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-    : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000");
+/**
+ * Picks the first candidate that parses as an absolute URL, trying a bare
+ * host (Vercel's env vars have no scheme) before an as-given value. Falls
+ * back to localhost so a misconfigured env var never fails the build.
+ */
+function resolveSiteUrl(): URL {
+  const candidates = [
+    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL &&
+      `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    for (const attempt of [candidate, `https://${candidate}`]) {
+      try {
+        return new URL(attempt);
+      } catch {
+        // try the next form / candidate
+      }
+    }
+  }
+  return new URL("http://localhost:3000");
+}
+
+const siteUrl = resolveSiteUrl();
 
 export const viewport: Viewport = {
   themeColor: "#0B0A12",
@@ -29,7 +48,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: siteUrl,
   title: {
     default: "Palmara — Read your palm",
     template: "%s · Palmara",
