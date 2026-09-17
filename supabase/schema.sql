@@ -10,6 +10,7 @@ create table if not exists public.readings (
   status text not null default 'processing',    -- 'processing' | 'complete' | 'failed'
   analysis_json jsonb,                          -- structured vision-model output (lines, mounts) — analyzed once
   detailed_text text,                           -- Detailed Reading, generated on demand from analysis_json
+  detailed_status text,                         -- null | 'processing' | <failure message>; see lib/generateReading.ts
   owner_token uuid not null default gen_random_uuid(), -- proves ownership for manual delete; never exposed after creation
   image_deleted_at timestamptz                  -- set when the 90-day retention job prunes the photo
 );

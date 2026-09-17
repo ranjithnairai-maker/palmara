@@ -41,6 +41,12 @@ export interface Reading {
   analysis_json: AnalysisJson | null;
   /** Detailed Reading — raw text (usually JSON-encoded DetailedSections); null until revealed. */
   detailed_text: string | null;
+  /** null (not started) | 'processing' (background generation in flight) | a
+   * failure message. Generation runs fire-and-forget (see
+   * app/api/readings/[id]/detailed/route.ts) because it can take longer
+   * than a single HTTP request should block on — the client polls this via
+   * GET /api/readings/[id] instead of waiting on the POST response. */
+  detailed_status: string | null;
   /** Proves ownership for manual delete. Server-only — never sent to the client after creation. */
   owner_token: string;
   image_deleted_at: string | null;

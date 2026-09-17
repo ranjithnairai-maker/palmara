@@ -47,7 +47,12 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
   const [waitedTooLong, setWaitedTooLong] = useState(false);
-  const [revealing, setRevealing] = useState(false);
+  // "Triggering" covers only the brief window between clicking Reveal and
+  // the kickoff POST responding; the actual generation is tracked via
+  // reading.detailed_status (see the polling effect below), since it runs
+  // in the background rather than inside that POST's response.
+  const [triggeringDetailed, setTriggeringDetailed] = useState(false);
+  const [detailedWaitedTooLong, setDetailedWaitedTooLong] = useState(false);
   const [detailedError, setDetailedError] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +75,26 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
     }, 3000);
     return () => clearInterval(t);
   }, [reading.status, refetch]);
+
+  // Poll while the Detailed Reading is generating in the background — it
+  // can take 20-50+ seconds on the free model, too long to hold the
+  // kickoff request open for, so /detailed returns immediately and this
+  // effect watches reading.detailed_status via the same refetch used above.
+  const isRevealingDetailed =
+    reading.detailed_status === "processing" && !reading.detailed_text;
+  useEffect(() => {
+    // detailedWaitedTooLong itself resets at the start of each revealDetailed()
+    // attempt, not here — this effect only needs to arm the bail-out timer
+    // while a generation is actually in flight.
+    if (!isRevealingDetailed) return;
+    let ticks = 0;
+    const t = setInterval(() => {
+      ticks += 1;
+      if (ticks > 20) setDetailedWaitedTooLong(true); // ~60s with no result
+      refetch();
+    }, 3000);
+    return () => clearInterval(t);
+  }, [isRevealingDetailed, refetch]);
 
   useEffect(() => {
     if (chat.length) {
@@ -143,7 +168,8 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
   }
 
   async function revealDetailed() {
-    setRevealing(true);
+    setTriggeringDetailed(true);
+    setDetailedWaitedTooLong(false);
     setDetailedError(null);
     try {
       const res = await fetch(`/api/readings/${shareId}/detailed`, { method: "POST" });
@@ -152,15 +178,25 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
         setDetailedError(data.error ?? "That didn't come through. Try again.");
         return;
       }
-      setPayload((p) => ({
-        ...p,
-        reading: { ...p.reading, detailed_text: data.detailedText ?? p.reading.detailed_text },
-        detailedSections: data.detailedSections ?? null,
-      }));
+      if (data.status === "complete") {
+        // Already generated earlier (idempotent) — no need to poll.
+        setPayload((p) => ({
+          ...p,
+          reading: { ...p.reading, detailed_text: data.detailedText, detailed_status: null },
+          detailedSections: data.detailedSections ?? null,
+        }));
+      } else {
+        // Kicked off in the background — reflect that immediately so the
+        // polling effect starts without waiting for a refetch round trip.
+        setPayload((p) => ({
+          ...p,
+          reading: { ...p.reading, detailed_status: "processing" },
+        }));
+      }
     } catch {
       setDetailedError("Network trouble reaching the reader. Try again.");
     } finally {
-      setRevealing(false);
+      setTriggeringDetailed(false);
     }
   }
 
@@ -318,7 +354,29 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
             <PalmMarkdown>{reading.reading_text}</PalmMarkdown>
           </div>
 
-          {!hasDetailed && (
+          {!hasDetailed && isRevealingDetailed && (
+            <div className="mt-10 rounded-2xl border border-[rgba(217,178,94,0.3)] bg-[rgba(61,31,79,0.25)] p-8 text-center">
+              <p className="eyebrow">Weaving it together</p>
+              <h3 className="mt-2 font-serif text-xl text-cream">
+                Revealing Your Full Reading…
+              </h3>
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-cream-muted">
+                The free reader can take up to a minute for the long version.
+              </p>
+              {detailedWaitedTooLong && (
+                <button
+                  type="button"
+                  onClick={revealDetailed}
+                  disabled={triggeringDetailed}
+                  className="btn-ghost mt-6 disabled:opacity-60"
+                >
+                  {triggeringDetailed ? "Nudging…" : "Still going — nudge it"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {!hasDetailed && !isRevealingDetailed && (
             <div className="mt-10 rounded-2xl border border-[rgba(217,178,94,0.3)] bg-[rgba(61,31,79,0.25)] p-8 text-center">
               <p className="eyebrow">There is more</p>
               <h3 className="mt-2 font-serif text-xl text-cream">
@@ -331,13 +389,16 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
               <button
                 type="button"
                 onClick={revealDetailed}
-                disabled={revealing}
+                disabled={triggeringDetailed}
                 className="btn-gold mt-6 disabled:opacity-60"
               >
-                {revealing ? "Revealing…" : "Reveal Your Full Reading"}
+                {triggeringDetailed ? "Starting…" : "Reveal Your Full Reading"}
               </button>
-              {detailedError && (
-                <p className="mt-3 text-xs text-[#f0c9c9]">{detailedError}</p>
+              {(detailedError ||
+                (reading.detailed_status && reading.detailed_status !== "processing")) && (
+                <p className="mt-3 text-xs text-[#f0c9c9]">
+                  {detailedError ?? reading.detailed_status}
+                </p>
               )}
             </div>
           )}

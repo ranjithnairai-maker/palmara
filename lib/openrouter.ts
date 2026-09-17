@@ -83,15 +83,72 @@ async function callOpenRouterOnce(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  // Race the fetch against an independent timer rather than relying solely
-  // on AbortController to reject it. Observed in production: a stalled
-  // upstream connection sometimes doesn't reject the fetch promise
-  // promptly on abort() (a real class of issue with slow/hanging TCP
-  // reads), which silently ate our whole timeout budget and let Vercel's
-  // own hard 60s function kill fire instead of our friendly error. The
-  // race guarantees this function moves on at `timeoutMs` regardless of
-  // whether the abandoned fetch ever actually resolves — it's left to
-  // settle on its own in the background rather than awaited further.
+  // Root-caused in production + confirmed locally: `fetch()` resolving only
+  // means the response HEADERS arrived — reading the body (`res.json()`) is
+  // a separate async step that can itself stall indefinitely on a slow or
+  // stuck stream, and was previously left completely unprotected once the
+  // initial fetch "won". The whole fetch-then-parse sequence is raced here
+  // as one unit against an independent timer (not just AbortController,
+  // which wasn't reliably rejecting a stalled connection either) so nothing
+  // downstream of the initial response can silently hang forever.
+  async function fetchAndParse(): Promise<string> {
+    const res = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "X-Title": "Palmara",
+        "HTTP-Referer":
+          process.env.NEXT_PUBLIC_SITE_URL || "https://palmara.app",
+      },
+      body: JSON.stringify({
+        model: getModel(),
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const body = await res.json();
+        detail = body?.error?.message || JSON.stringify(body?.error || body);
+      } catch {
+        detail = await res.text().catch(() => "");
+      }
+      console.error(`[openrouter] ${res.status} ${detail || res.statusText}`);
+      throw new OpenRouterError(
+        `OpenRouter ${res.status}: ${detail || res.statusText}`,
+        res.status,
+      );
+    }
+
+    const data = (await res.json()) as {
+      choices?: Array<{
+        message?: { content?: string | null; reasoning?: string | null };
+        finish_reason?: string;
+      }>;
+      error?: { message?: string };
+    };
+    if (data.error?.message) {
+      console.error(`[openrouter] body error: ${data.error.message}`);
+      throw new OpenRouterError(`OpenRouter: ${data.error.message}`, 502);
+    }
+    const choice = data.choices?.[0];
+    const content = choice?.message?.content ?? choice?.message?.reasoning ?? "";
+    if (!content || !content.trim()) {
+      console.error(
+        `[openrouter] empty content; finish_reason=${choice?.finish_reason}; raw=${JSON.stringify(
+          data,
+        ).slice(0, 600)}`,
+      );
+      throw new OpenRouterError("OpenRouter returned an empty response.", 502);
+    }
+    return content;
+  }
+
   const raceTimeout = new Promise<never>((_, reject) => {
     setTimeout(
       () => reject(new OpenRouterError("The reader took too long to respond.", 504)),
@@ -99,30 +156,15 @@ async function callOpenRouterOnce(
     );
   });
 
-  let res: Response;
   try {
-    res = await Promise.race([
-      fetch(OPENROUTER_URL, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "X-Title": "Palmara",
-          "HTTP-Referer":
-            process.env.NEXT_PUBLIC_SITE_URL || "https://palmara.app",
-        },
-        body: JSON.stringify({
-          model: getModel(),
-          messages,
-          temperature,
-          max_tokens: maxTokens,
-        }),
-      }),
-      raceTimeout,
-    ]);
+    const content = await Promise.race([fetchAndParse(), raceTimeout]);
+    clearTimeout(timer);
+    return content;
   } catch (err) {
     clearTimeout(timer);
+    // Whether fetchAndParse() or raceTimeout won, make sure the underlying
+    // request is actually cut loose rather than left running unobserved.
+    controller.abort();
     if (err instanceof OpenRouterError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
       throw new OpenRouterError("The reader took too long to respond.", 504);
@@ -132,45 +174,6 @@ async function callOpenRouterOnce(
       502,
     );
   }
-  clearTimeout(timer);
-
-  if (!res.ok) {
-    let detail = "";
-    try {
-      const body = await res.json();
-      detail = body?.error?.message || JSON.stringify(body?.error || body);
-    } catch {
-      detail = await res.text().catch(() => "");
-    }
-    console.error(`[openrouter] ${res.status} ${detail || res.statusText}`);
-    throw new OpenRouterError(
-      `OpenRouter ${res.status}: ${detail || res.statusText}`,
-      res.status,
-    );
-  }
-
-  const data = (await res.json()) as {
-    choices?: Array<{
-      message?: { content?: string | null; reasoning?: string | null };
-      finish_reason?: string;
-    }>;
-    error?: { message?: string };
-  };
-  if (data.error?.message) {
-    console.error(`[openrouter] body error: ${data.error.message}`);
-    throw new OpenRouterError(`OpenRouter: ${data.error.message}`, 502);
-  }
-  const choice = data.choices?.[0];
-  const content = choice?.message?.content ?? choice?.message?.reasoning ?? "";
-  if (!content || !content.trim()) {
-    console.error(
-      `[openrouter] empty content; finish_reason=${choice?.finish_reason}; raw=${JSON.stringify(
-        data,
-      ).slice(0, 600)}`,
-    );
-    throw new OpenRouterError("OpenRouter returned an empty response.", 502);
-  }
-  return content;
 }
 
 /** Removes <think>...</think> / reasoning scaffolding some models emit. */

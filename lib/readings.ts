@@ -66,6 +66,7 @@ export async function updateReading(
       | "image_path"
       | "analysis_json"
       | "detailed_text"
+      | "detailed_status"
       | "image_deleted_at"
     >
   >,

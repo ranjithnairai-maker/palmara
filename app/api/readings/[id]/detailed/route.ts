@@ -1,18 +1,22 @@
-import { NextResponse } from "next/server";
-import { getReading, isUuid } from "@/lib/readings";
-import { generateDetailedReading } from "@/lib/generateReading";
+import { NextResponse, after } from "next/server";
+import { getReading, updateReading, isUuid } from "@/lib/readings";
+import { runDetailedReadingGeneration } from "@/lib/generateReading";
 import { parseDetailedReading } from "@/lib/parse";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 
-// Text-only completion (no image), but still a real model call — give it
-// the same generous ceiling as /generate rather than the fast-path's 30s.
+// Generation itself runs in the background via after() rather than being
+// awaited here — see lib/generateReading.ts. maxDuration still bounds that
+// background work (the invocation isn't considered finished until it
+// completes or this ceiling hits), but no client is left holding an open
+// HTTP request for the whole time either way.
 export const maxDuration = 60;
 export const runtime = "nodejs";
 
 /**
- * Generates (or, if already present, just returns) the Detailed Reading
+ * Kicks off (or, if already generated, just returns) the Detailed Reading
  * for a completed reading. Triggered by the "Reveal Your Full Reading"
- * button. Idempotent — safe to call again once detailed_text exists.
+ * button. Returns fast either way — the client polls GET
+ * /api/readings/[id] to see the result land once generation finishes.
  */
 export async function POST(
   req: Request,
@@ -38,9 +42,17 @@ export async function POST(
   if (reading.detailed_text) {
     return NextResponse.json({
       id,
+      status: "complete",
       detailedText: reading.detailed_text,
       detailedSections: parseDetailedReading(reading.detailed_text),
     });
+  }
+
+  // Already in flight (a double-click, or the client re-polling after a
+  // page reload mid-generation) — don't start a second one, just tell the
+  // client to keep polling.
+  if (reading.detailed_status === "processing") {
+    return NextResponse.json({ id, status: "processing" });
   }
 
   const limit = await checkRateLimit("detailed_reading", req);
@@ -49,17 +61,14 @@ export async function POST(
     return NextResponse.json(errBody, init);
   }
 
-  const result = await generateDetailedReading(id);
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.message, kind: result.kind },
-      { status: result.kind === "rate_limited" ? 429 : 502 },
-    );
-  }
+  await updateReading(id, { detailed_status: "processing" });
 
-  return NextResponse.json({
-    id,
-    detailedText: result.detailedText,
-    detailedSections: parseDetailedReading(result.detailedText),
-  });
+  // Fire-and-forget: this can legitimately take 20-50+ seconds on the free
+  // model — far too long to hold a single request/response open for
+  // reliably. after() keeps it running past this handler's return without
+  // blocking the response, same reasoning as the main reading's /generate
+  // two-phase flow.
+  after(() => runDetailedReadingGeneration(id));
+
+  return NextResponse.json({ id, status: "processing" });
 }

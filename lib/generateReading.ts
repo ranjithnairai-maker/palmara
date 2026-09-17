@@ -12,9 +12,11 @@ export type GenerateResult =
   | { ok: true; handElement: string | null }
   | { ok: false; kind: "not_a_palm" | "rate_limited" | "model_error"; message: string };
 
-export type DetailedResult =
-  | { ok: true; detailedText: string }
-  | { ok: false; kind: "rate_limited" | "model_error" | "not_ready"; message: string };
+// Runs as a next/server after() background task, not raced against an HTTP
+// response — see app/api/readings/[id]/detailed/route.ts for why. Budget
+// generously against the route's maxDuration=60 rather than a tight client
+// timeout, since nothing is waiting synchronously on this anymore.
+const DETAILED_BACKGROUND_TIMEOUT_MS = 50_000;
 
 // Vercel Hobby hard-kills a function at 60s with a platform crash page (not
 // JSON our client can read) regardless of `maxDuration` in the route. A 48s
@@ -153,21 +155,22 @@ function fallbackQuickInsights(analysis: AnalysisJson): string {
 }
 
 /**
- * Generates the Detailed Reading from the already-stored analysis_json —
- * no image re-sent. Idempotent: if detailed_text already exists, returns it
- * without calling the model again.
+ * Runs the Detailed Reading generation in the background, kicked off via
+ * next/server's after() from the /detailed route rather than awaited by
+ * its HTTP response. This call can legitimately take 20-50+ seconds on the
+ * free model (confirmed in production — it isn't just slow to fail, it can
+ * genuinely hang with no response for that long), which is too long to
+ * hold a single request open for reliably under Vercel's hard 60s function
+ * ceiling. So instead: this always resolves (never throws), writing the
+ * outcome straight to the reading row — detailed_text on success,
+ * detailed_status set to a friendly message on failure — and the client
+ * polls GET /api/readings/[id] to see it land, exactly like the main
+ * reading's /generate flow already does for the same reason.
  */
-export async function generateDetailedReading(readingId: string): Promise<DetailedResult> {
+export async function runDetailedReadingGeneration(readingId: string): Promise<void> {
   const reading = await getReading(readingId);
-  if (!reading || reading.status !== "complete" || !reading.analysis_json) {
-    return {
-      ok: false,
-      kind: "not_ready",
-      message: "This reading isn't ready for the full version yet.",
-    };
-  }
-  if (reading.detailed_text) {
-    return { ok: true, detailedText: reading.detailed_text };
+  if (!reading || reading.status !== "complete" || !reading.analysis_json || reading.detailed_text) {
+    return; // route already validated this before scheduling — nothing to do
   }
 
   let raw: string;
@@ -179,17 +182,21 @@ export async function generateDetailedReading(readingId: string): Promise<Detail
       ],
       temperature: 0.85,
       maxTokens: 2200,
-      timeoutMs: FUNCTION_TIME_BUDGET_MS,
+      timeoutMs: DETAILED_BACKGROUND_TIMEOUT_MS,
     });
   } catch (err) {
-    return { ok: false, ...friendlyModelError(err) };
+    const { message } = friendlyModelError(err);
+    await updateReading(readingId, { detailed_status: message }).catch((updateErr) => {
+      console.error(
+        `[generateReading] failed to persist detailed_status failure: ${updateErr instanceof Error ? updateErr.message : updateErr}`,
+      );
+    });
+    return;
   }
 
   // Store whatever the model returned (JSON is preferred for themed
   // rendering; parseDetailedReading() falls back gracefully on the render
   // side if it isn't valid JSON) — never silently drop a real reply.
-  const cleaned = stripReasoning(raw) || raw.trim();
-  const detailedText = cleaned;
-  await updateReading(readingId, { detailed_text: detailedText });
-  return { ok: true, detailedText };
+  const detailedText = stripReasoning(raw) || raw.trim();
+  await updateReading(readingId, { detailed_text: detailedText, detailed_status: null }).catch(() => {});
 }
