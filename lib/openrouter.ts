@@ -83,27 +83,47 @@ async function callOpenRouterOnce(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Race the fetch against an independent timer rather than relying solely
+  // on AbortController to reject it. Observed in production: a stalled
+  // upstream connection sometimes doesn't reject the fetch promise
+  // promptly on abort() (a real class of issue with slow/hanging TCP
+  // reads), which silently ate our whole timeout budget and let Vercel's
+  // own hard 60s function kill fire instead of our friendly error. The
+  // race guarantees this function moves on at `timeoutMs` regardless of
+  // whether the abandoned fetch ever actually resolves — it's left to
+  // settle on its own in the background rather than awaited further.
+  const raceTimeout = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new OpenRouterError("The reader took too long to respond.", 504)),
+      timeoutMs,
+    );
+  });
+
   let res: Response;
   try {
-    res = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "X-Title": "Palmara",
-        "HTTP-Referer":
-          process.env.NEXT_PUBLIC_SITE_URL || "https://palmara.app",
-      },
-      body: JSON.stringify({
-        model: getModel(),
-        messages,
-        temperature,
-        max_tokens: maxTokens,
+    res = await Promise.race([
+      fetch(OPENROUTER_URL, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "X-Title": "Palmara",
+          "HTTP-Referer":
+            process.env.NEXT_PUBLIC_SITE_URL || "https://palmara.app",
+        },
+        body: JSON.stringify({
+          model: getModel(),
+          messages,
+          temperature,
+          max_tokens: maxTokens,
+        }),
       }),
-    });
+      raceTimeout,
+    ]);
   } catch (err) {
     clearTimeout(timer);
+    if (err instanceof OpenRouterError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
       throw new OpenRouterError("The reader took too long to respond.", 504);
     }
