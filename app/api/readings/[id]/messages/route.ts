@@ -96,8 +96,9 @@ export async function POST(
       maxTokens: 900,
       // Vercel hard-kills this function at 60s with a platform crash page
       // (not JSON), regardless of maxDuration — leave real headroom so a
-      // slow model resolves to our own friendly error instead.
-      timeoutMs: 48_000,
+      // slow model resolves to our own friendly error instead. (48s wasn't
+      // conservative enough in practice — see lib/generateReading.ts.)
+      timeoutMs: 35_000,
     });
     answer = stripReasoning(raw) || raw.trim();
   } catch (err) {

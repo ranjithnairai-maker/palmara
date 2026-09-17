@@ -17,12 +17,14 @@ export type DetailedResult =
   | { ok: false; kind: "rate_limited" | "model_error" | "not_ready"; message: string };
 
 // Vercel Hobby hard-kills a function at 60s with a platform crash page (not
-// JSON our client can read) regardless of `maxDuration` in the route — so
-// every OpenRouter call in this file budgets to a deadline well under that,
-// leaving headroom for DB round trips, cold start, and response
-// serialization. Blowing past this must always resolve to our own friendly
-// error, never a silent platform timeout.
-const FUNCTION_TIME_BUDGET_MS = 48_000;
+// JSON our client can read) regardless of `maxDuration` in the route. A 48s
+// internal budget turned out not to be conservative enough in practice —
+// on a saturated free model, the OpenRouter request itself can simply hang
+// with no response for 45-50+s (confirmed by direct testing, not just
+// failing fast), and cold start + DB round trips + serialization eat
+// further into the remaining ~12s, occasionally still crossing 60s. Budget
+// well below that instead so our own abort reliably wins the race.
+const FUNCTION_TIME_BUDGET_MS = 35_000;
 const MIN_USEFUL_CALL_MS = 4_000; // below this, don't even attempt a call
 
 function friendlyModelError(err: unknown): { kind: "rate_limited" | "model_error"; message: string } {
