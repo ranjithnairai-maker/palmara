@@ -84,13 +84,26 @@ runs TypeScript and fails on any type error.
   instead (see the API routes and page Server Components for the pattern).
 - **`lib/prompts.ts`** — the persona + guardrails (no medical/death/legal
   claims presented as fact, plus the warm/gentle/never-clinical voice
-  requirement) live in `PALMISTICA_PERSONA`, shared by `ANALYSIS_SYSTEM`,
-  `QUICK_INSIGHTS_SYSTEM`, `DETAILED_READING_SYSTEM`, and the chat prompt.
-  Edit the shared block, not each prompt separately, or they'll drift.
-  `buildChatSystemPrompt()` grounds every chat answer in the full
-  `analysis_json` (and `detailed_text`, once generated) regardless of which
-  tier the viewer is currently looking at — never let a chat answer say
-  "reveal the full reading to see that."
+  requirement, plus a no-em-dash/grammar-correctness style block) live in
+  `PALMISTICA_PERSONA`, shared by `ANALYSIS_SYSTEM`, `QUICK_INSIGHTS_SYSTEM`,
+  `DETAILED_READING_SYSTEM`, and the chat prompt. Edit the shared block, not
+  each prompt separately, or they'll drift. `buildChatSystemPrompt()`
+  grounds every chat answer in the full `analysis_json` (and
+  `detailed_text`, once generated) regardless of which tier the viewer is
+  currently looking at — never let a chat answer say "reveal the full
+  reading to see that."
+- **`lib/sanitize-reading-text.ts`** — safety net behind the style block
+  above: prompt instructions reduce but don't eliminate em-dash usage and
+  grammar slips on a small/free model, so every generated text field
+  (headline, per-line traits/takeaways, Quick Insights, Detailed Reading,
+  chat replies) is run through `sanitizeReadingText()` once, at generation
+  time, before it's stored — never on render. `lib/parse.ts`'s `str()`
+  helper is the single choke point for analysis/detailed-reading fields;
+  Quick Insights and chat replies (plain prose, not parsed JSON) are
+  sanitized directly at their call sites in `lib/generateReading.ts` and
+  `app/api/readings/[id]/messages/route.ts`. The heuristic is a simple
+  word-count check, not real grammar parsing — worth eyeballing on real
+  output rather than assuming it's perfect.
 - **`ReadingView.tsx`** renders three top-level states (`processing` polls
   every 3s, `failed` offers retry via `/generate`, `complete` shows the
   tiered reading + chat) and is reused, with a `readOnly` prop, by both

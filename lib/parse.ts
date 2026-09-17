@@ -1,5 +1,6 @@
 import type { AnalysisJson, DetailedSections, ParsedAnalysis } from "./types";
 import { stripReasoning } from "./openrouter";
+import { sanitizeReadingText } from "./sanitize-reading-text";
 
 const VALID_ELEMENTS = ["Earth", "Air", "Fire", "Water"];
 const LINE_KEYS = ["life", "heart", "head", "fate"] as const;
@@ -12,8 +13,14 @@ function normalizeElement(value: unknown): string | null {
   return hit ?? null;
 }
 
+// Single choke point for every model-generated string field pulled out of
+// analysis_json / the Detailed Reading JSON — running the em-dash/grammar
+// safety net here means it's applied once, at parse time, rather than
+// separately at every call site.
 function str(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value.trim() : fallback;
+  return typeof value === "string"
+    ? sanitizeReadingText(value.trim())
+    : fallback;
 }
 
 /** Pulls the first balanced-looking JSON object out of a string. */

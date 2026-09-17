@@ -5,6 +5,7 @@ import {
   QUICK_INSIGHTS_SYSTEM,
 } from "./prompts";
 import { parseAnalysis } from "./parse";
+import { sanitizeReadingText } from "./sanitize-reading-text";
 import { updateReading, addMessage, getReading } from "./readings";
 import type { AnalysisJson } from "./types";
 
@@ -134,6 +135,10 @@ export async function generateAndPersistReading(
     }
   }
 
+  // Safety net: prompt instructions alone don't fully stop a small/free
+  // model from reaching for em dashes or the odd grammatical slip.
+  quickInsights = sanitizeReadingText(quickInsights).trim();
+
   await updateReading(readingId, {
     status: "complete",
     reading_text: quickInsights.trim(),
@@ -206,6 +211,11 @@ export async function runDetailedReadingGeneration(readingId: string): Promise<v
   // Store whatever the model returned (JSON is preferred for themed
   // rendering; parseDetailedReading() falls back gracefully on the render
   // side if it isn't valid JSON) — never silently drop a real reply.
-  const detailedText = stripReasoning(raw) || raw.trim();
+  // Sanitized here too (on top of parseDetailedReading()'s own per-field
+  // pass in lib/parse.ts) so the raw-markdown fallback path is also clean
+  // when the model's reply isn't valid JSON. An em dash never appears in
+  // bare JSON syntax outside a string value, so this is safe to run on the
+  // whole blob before it's even parsed.
+  const detailedText = sanitizeReadingText(stripReasoning(raw) || raw.trim());
   await updateReading(readingId, { detailed_text: detailedText, detailed_status: null }).catch(() => {});
 }

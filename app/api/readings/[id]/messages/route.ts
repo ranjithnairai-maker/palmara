@@ -9,6 +9,7 @@ import {
   type ChatMessage,
 } from "@/lib/openrouter";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
+import { sanitizeReadingText } from "@/lib/sanitize-reading-text";
 
 export const maxDuration = 60;
 export const runtime = "nodejs";
@@ -102,7 +103,7 @@ export async function POST(
       // slow model resolves to our own friendly error instead.
       timeoutMs: 45_000,
     });
-    answer = stripReasoning(raw) || raw.trim();
+    answer = sanitizeReadingText(stripReasoning(raw) || raw.trim());
   } catch (err) {
     const isRate = err instanceof OpenRouterError && err.isRateLimit;
     return NextResponse.json(

@@ -4,6 +4,20 @@ const TIERS = [
   { env: process.env.NEXT_PUBLIC_TIP_LINK_5, label: "Send a blessing 🌙", amount: "$5" },
 ] as const;
 
+const CONFIGURED_TIERS = TIERS.filter(
+  (t): t is (typeof TIERS)[number] & { env: string } => Boolean(t.env),
+);
+
+// Warn once at module load (not during render, which must stay pure) so a
+// missing/misconfigured NEXT_PUBLIC_TIP_LINK_* env var is visible in logs
+// rather than silently vanishing the tip section.
+if (CONFIGURED_TIERS.length < TIERS.length) {
+  const missing = TIERS.filter((t) => !t.env).map((t) => t.amount);
+  console.warn(
+    `TipJar: missing NEXT_PUBLIC_TIP_LINK env var(s) for ${missing.join(", ")} — omitting ${missing.length === TIERS.length ? "the whole tip section" : "those buttons"}.`,
+  );
+}
+
 /**
  * Quiet, always-visible support prompt — shown to every viewer (creator and
  * anyone opening a shared link alike), unlike the owner-only delete
@@ -11,7 +25,7 @@ const TIERS = [
  * environments don't show dead buttons.
  */
 export function TipJar() {
-  const tiers = TIERS.filter((t): t is typeof t & { env: string } => Boolean(t.env));
+  const tiers = CONFIGURED_TIERS;
   if (tiers.length === 0) return null;
 
   return (

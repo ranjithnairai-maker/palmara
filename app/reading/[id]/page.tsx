@@ -21,9 +21,10 @@ export async function generateMetadata(props: PageProps<"/reading/[id]">) {
   if (!isUuid(id)) return { title: "Reading not found" };
   const reading = await getReading(id).catch(() => null);
   if (!reading) return { title: "Reading not found" };
+  const article = reading.hand_element && /^[aeiou]/i.test(reading.hand_element) ? "An" : "A";
   return {
     title: reading.hand_element
-      ? `A ${reading.hand_element}-hand reading`
+      ? `${article} ${reading.hand_element} hand reading`
       : "Your palm reading",
   };
 }
