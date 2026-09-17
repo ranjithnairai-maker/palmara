@@ -94,6 +94,10 @@ export async function POST(
       messages,
       temperature: 0.8,
       maxTokens: 900,
+      // Vercel hard-kills this function at 60s with a platform crash page
+      // (not JSON), regardless of maxDuration — leave real headroom so a
+      // slow model resolves to our own friendly error instead.
+      timeoutMs: 48_000,
     });
     answer = stripReasoning(raw) || raw.trim();
   } catch (err) {

@@ -16,6 +16,15 @@ export type DetailedResult =
   | { ok: true; detailedText: string }
   | { ok: false; kind: "rate_limited" | "model_error" | "not_ready"; message: string };
 
+// Vercel Hobby hard-kills a function at 60s with a platform crash page (not
+// JSON our client can read) regardless of `maxDuration` in the route — so
+// every OpenRouter call in this file budgets to a deadline well under that,
+// leaving headroom for DB round trips, cold start, and response
+// serialization. Blowing past this must always resolve to our own friendly
+// error, never a silent platform timeout.
+const FUNCTION_TIME_BUDGET_MS = 48_000;
+const MIN_USEFUL_CALL_MS = 4_000; // below this, don't even attempt a call
+
 function friendlyModelError(err: unknown): { kind: "rate_limited" | "model_error"; message: string } {
   if (err instanceof OpenRouterError && err.isRateLimit) {
     return {
@@ -42,6 +51,12 @@ export async function generateAndPersistReading(
   readingId: string,
   imageDataUrl: string,
 ): Promise<GenerateResult> {
+  // Shared across both calls below — callOpenRouter's default timeout is a
+  // fresh window per call, so without this the analysis and Quick Insights
+  // calls could each run close to their own full budget and together blow
+  // well past Vercel's hard function ceiling (see FUNCTION_TIME_BUDGET_MS).
+  const deadline = Date.now() + FUNCTION_TIME_BUDGET_MS;
+
   let rawAnalysis: string;
   try {
     rawAnalysis = await callOpenRouter({
@@ -57,6 +72,7 @@ export async function generateAndPersistReading(
       ],
       temperature: 0.7,
       maxTokens: 1400,
+      timeoutMs: deadline - Date.now(),
     });
   } catch (err) {
     await updateReading(readingId, { status: "failed" }).catch(() => {});
@@ -80,23 +96,33 @@ export async function generateAndPersistReading(
 
   const analysis = parsed.analysis;
 
+  // Whatever's left of the shared budget after the (usually slower, always
+  // larger) analysis call above. If there's not enough left to be worth a
+  // network round trip, skip straight to the fallback rather than risk
+  // getting killed mid-request with no response at all.
+  const remaining = deadline - Date.now();
   let quickInsights: string;
-  try {
-    const raw = await callOpenRouter({
-      messages: [
-        { role: "system", content: QUICK_INSIGHTS_SYSTEM },
-        { role: "user", content: JSON.stringify(analysis) },
-      ],
-      temperature: 0.85,
-      maxTokens: 700,
-    });
-    quickInsights = stripReasoning(raw) || raw.trim();
-  } catch (err) {
-    // The (expensive) image analysis already succeeded — don't discard it.
-    // Fall back to a plain-language stitch of the analysis so the reading
-    // still completes; the user can always ask chat for more.
+  if (remaining < MIN_USEFUL_CALL_MS) {
     quickInsights = fallbackQuickInsights(analysis);
-    void err;
+  } else {
+    try {
+      const raw = await callOpenRouter({
+        messages: [
+          { role: "system", content: QUICK_INSIGHTS_SYSTEM },
+          { role: "user", content: JSON.stringify(analysis) },
+        ],
+        temperature: 0.85,
+        maxTokens: 700,
+        timeoutMs: remaining,
+      });
+      quickInsights = stripReasoning(raw) || raw.trim();
+    } catch (err) {
+      // The (expensive) image analysis already succeeded — don't discard
+      // it. Fall back to a plain-language stitch of the analysis so the
+      // reading still completes; the user can always ask chat for more.
+      quickInsights = fallbackQuickInsights(analysis);
+      void err;
+    }
   }
 
   await updateReading(readingId, {
@@ -151,6 +177,7 @@ export async function generateDetailedReading(readingId: string): Promise<Detail
       ],
       temperature: 0.85,
       maxTokens: 2200,
+      timeoutMs: FUNCTION_TIME_BUDGET_MS,
     });
   } catch (err) {
     return { ok: false, ...friendlyModelError(err) };
