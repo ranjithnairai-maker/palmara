@@ -106,6 +106,7 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
     hand_element: normalizeElement(obj.hand_element),
     lines,
     mounts: str(obj.mounts),
+    headline: str(obj.headline, "A reading, written for one hand only."),
   };
 
   return { isPalm: true, analysis, clarification: null };

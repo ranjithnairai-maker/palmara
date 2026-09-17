@@ -13,7 +13,7 @@ export default function NotFound() {
         This link may be mistyped, or the reading has since been cleared away.
       </p>
       <Link href="/" className="btn-gold mt-8">
-        Back to Palmara
+        Back to Palmistica
       </Link>
     </main>
   );

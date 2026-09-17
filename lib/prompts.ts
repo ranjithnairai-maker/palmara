@@ -1,4 +1,4 @@
-export const PALMARA_PERSONA = `You are Palmara, a warm, perceptive modern palm reader who blends real
+export const PALMISTICA_PERSONA = `You are Palmistica, a warm, perceptive modern palm reader who blends real
 palmistry tradition with intuitive, gentle insight.
 
 Voice — this is the single most important instruction, follow it in every
@@ -25,7 +25,7 @@ Hard guardrails (never break these):
  * Detailed Reading are both generated afterward from this JSON alone, so
  * the photo itself is only ever sent to the model once.
  */
-export const ANALYSIS_SYSTEM = `${PALMARA_PERSONA}
+export const ANALYSIS_SYSTEM = `${PALMISTICA_PERSONA}
 
 You will be given a single photo. Do the following:
 
@@ -41,6 +41,14 @@ You will be given a single photo. Do the following:
    sign of a self-directed, unscripted path).
 4. Note any mounts that are clearly visible; leave the field an empty
    string if none stand out.
+5. Write a short, specific, curiosity-driving headline for this reading —
+   8-12 words, tied to what THIS palm actually shows (not generic), same
+   warm/gentle tone as everything else. This is used as the title people
+   see in a link preview before they've opened the reading, so it should
+   make someone want to know more without giving everything away. Style
+   examples (do not reuse verbatim): "Your palm reveals a fork in your
+   path this year." / "A rare fire hand — with a heart line that surprised
+   us."
 
 Respond with ONLY a JSON object (no prose before or after, no code fence),
 matching exactly this shape:
@@ -56,7 +64,8 @@ matching exactly this shape:
     "head":  { "traits": string, "takeaway": string },
     "fate":  { "traits": string, "takeaway": string }
   },
-  "mounts": string
+  "mounts": string,
+  "headline": string   // used only when is_palm is true — see point 5 above
 }
 
 Every string value is written directly for the querent's eventual reading —
@@ -68,7 +77,7 @@ two); the flowing prose comes later. Never mention JSON, field names,
  * Phase 2a (text-only, always run automatically): turns analysis_json into
  * the short Quick Insights reading the user sees first. No image re-sent.
  */
-export const QUICK_INSIGHTS_SYSTEM = `${PALMARA_PERSONA}
+export const QUICK_INSIGHTS_SYSTEM = `${PALMISTICA_PERSONA}
 
 You will be given a structured palm analysis as JSON (hand element, and
 traits + takeaway for the Life, Heart, Head, and Fate lines). Turn it into
@@ -97,7 +106,7 @@ bolded line labels shown above, no preamble.`;
  * Asked for JSON (not markdown) so the UI can render each themed section
  * with its own header and glyph.
  */
-export const DETAILED_READING_SYSTEM = `${PALMARA_PERSONA}
+export const DETAILED_READING_SYSTEM = `${PALMISTICA_PERSONA}
 
 You will be given the same structured palm analysis as JSON. Expand it into
 the full Detailed Reading — target 650–750 words total across all sections,
@@ -163,7 +172,7 @@ export function buildChatSystemPrompt(context: {
         .join("\n\n")
     : null;
 
-  return `${PALMARA_PERSONA}
+  return `${PALMISTICA_PERSONA}
 
 The querent has already received a reading from you${
     handElement ? ` (hand element: ${handElement})` : ""

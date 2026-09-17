@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# Palmara
+# Palmistica
 
 AI palm-reading web app. Upload/snap a palm photo → OpenRouter vision model
 reads it grounded in real palmistry → follow-up chat → permanent shareable
@@ -84,7 +84,7 @@ runs TypeScript and fails on any type error.
   instead (see the API routes and page Server Components for the pattern).
 - **`lib/prompts.ts`** — the persona + guardrails (no medical/death/legal
   claims presented as fact, plus the warm/gentle/never-clinical voice
-  requirement) live in `PALMARA_PERSONA`, shared by `ANALYSIS_SYSTEM`,
+  requirement) live in `PALMISTICA_PERSONA`, shared by `ANALYSIS_SYSTEM`,
   `QUICK_INSIGHTS_SYSTEM`, `DETAILED_READING_SYSTEM`, and the chat prompt.
   Edit the shared block, not each prompt separately, or they'll drift.
   `buildChatSystemPrompt()` grounds every chat answer in the full
@@ -133,14 +133,39 @@ runs TypeScript and fails on any type error.
   null `imageUrl`, which can also mean a transient fetch error) to decide
   whether to show the "aged out" placeholder vs. a generic "image
   unavailable" state.
+- **Share-link preview images.** The analysis call also produces a
+  `headline` (8-12 words, specific to that reading) stored in
+  `analysis_json` — no extra API call. `app/r/[id]/opengraph-image.tsx`
+  and `twitter-image.tsx` both call `renderReadingOgImage()` in
+  `lib/og-image.tsx`, which does a **narrow** Supabase query
+  (`getReadingOgData()` in `lib/readings.ts` — only `analysis_json`,
+  `hand_element`, `status`, never the full row or the photo) and renders a
+  branded 1200×630 `next/og` image from the headline — deliberately never
+  the user's real photo, so it stays fast, doesn't leak a photo into a
+  public link-preview context, and is unaffected by the 90-day photo
+  prune. Font glyphs not covered by the loaded Playfair Display font
+  (e.g. a unicode ✦) render as a blank box in `next/og`'s Satori renderer —
+  there's no OS font-fallback like a browser has — so decorative marks in
+  that file are inline SVG, not unicode symbols. If a reading id doesn't
+  resolve to a complete reading (missing, still processing, or deleted),
+  `renderReadingOgImage()` falls back to a generic branded "no longer
+  available" image rather than erroring — a social crawler hitting a dead
+  link should never see a broken preview. `generateMetadata` in
+  `app/r/[id]/page.tsx` sets `title`/`description`/OpenGraph/Twitter tags
+  from the same narrow query; it does **not** manually list `images` in
+  `openGraph` — the `opengraph-image.tsx`/`twitter-image.tsx` file
+  conventions in that same route segment are picked up automatically, and
+  listing them again would duplicate. `/r/[id]` stays `noindex` throughout
+  — that's independent of and doesn't conflict with rich share previews,
+  it only affects search engines.
 
 ## Conventions
 
 - Server-only code (`lib/supabase.ts`, `lib/readings.ts`, `lib/openrouter.ts`,
-  `lib/rateLimit.ts`) must only be imported by Route Handlers or Server
-  Components — never anything `"use client"`. This is how the Supabase
-  service role key and OpenRouter key stay out of the client bundle; verify
-  it whenever you add a new import of these modules.
+  `lib/rateLimit.ts`, `lib/og-image.tsx`) must only be imported by Route
+  Handlers or Server Components — never anything `"use client"`. This is how
+  the Supabase service role key and OpenRouter key stay out of the client
+  bundle; verify it whenever you add a new import of these modules.
 - API errors returned to the client are short, hand-written, in-voice
   strings ("The reader lost the thread there…") — never `err.message` from
   a caught exception unless you wrote that message yourself as validation

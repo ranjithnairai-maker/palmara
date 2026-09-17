@@ -1,4 +1,4 @@
--- Palmara schema. Run against a fresh Supabase project.
+-- Palmistica schema. Run against a fresh Supabase project.
 -- All access is server-side via the service role key, which bypasses RLS.
 
 create table if not exists public.readings (

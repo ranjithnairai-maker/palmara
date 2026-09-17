@@ -17,7 +17,7 @@ export function TipJar() {
   return (
     <div className="mt-12 rounded-2xl border border-[rgba(217,178,94,0.18)] bg-[rgba(23,19,31,0.4)] px-6 py-7 text-center">
       <p className="mx-auto max-w-md text-sm leading-relaxed text-cream-muted">
-        Enjoyed your reading? Palmara is free for everyone, kept alive by
+        Enjoyed your reading? Palmistica is free for everyone, kept alive by
         people who choose to support it. If this moment meant something to
         you, a small tip helps keep the magic going for the next person too.
       </p>

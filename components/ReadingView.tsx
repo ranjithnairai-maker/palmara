@@ -466,7 +466,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
 
           {!readOnly && chat.length === 0 && (
             <p className="mt-3 text-sm leading-relaxed text-cream-muted">
-              Ask Palmara anything the reading left open — the mounts, your
+              Ask Palmistica anything the reading left open — the mounts, your
               fingers, the smaller lines, or what a line means for one part of
               your life.
             </p>
@@ -495,7 +495,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
               {chat.map((m) => (
                 <div key={m.id}>
                   <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-cream-faint">
-                    {m.role === "user" ? "You asked" : "Palmara"}
+                    {m.role === "user" ? "You asked" : "Palmistica"}
                   </p>
                   {m.role === "user" ? (
                     <p className="rounded-xl border border-[rgba(243,238,228,0.12)] bg-[rgba(243,238,228,0.04)] px-4 py-3 text-sm text-cream">
@@ -514,7 +514,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
 
           {sending && (
             <p className="mt-6 animate-fade-up text-sm text-cream-faint">
-              <span className="text-gold">✦</span> Palmara is considering…
+              <span className="text-gold">✦</span> Palmistica is considering…
             </p>
           )}
           {chatError && (
@@ -562,7 +562,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
                 Your hands have their own story
               </h2>
               <p className="mx-auto mt-2 max-w-sm text-sm text-cream-muted">
-                Palmara reads it in about a minute. No account needed.
+                Palmistica reads it in about a minute. No account needed.
               </p>
               <Link href="/read" className="btn-gold mt-6 inline-flex">
                 Get your own reading

@@ -16,7 +16,7 @@ function subscribe() {
 
 function readOwnerToken(shareId: string): string | null {
   try {
-    return localStorage.getItem(`palmara_owner_${shareId}`);
+    return localStorage.getItem(`palmistica_owner_${shareId}`);
   } catch {
     return null;
   }
@@ -61,7 +61,7 @@ export function DeleteReadingControl({ shareId, onDeleted }: Props) {
         return;
       }
       try {
-        localStorage.removeItem(`palmara_owner_${shareId}`);
+        localStorage.removeItem(`palmistica_owner_${shareId}`);
       } catch {
         /* not essential */
       }

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 
 /**
- * Server-side rate limiting for Palmara's public, unauthenticated API.
+ * Server-side rate limiting for Palmistica's public, unauthenticated API.
  * There are no accounts here (by design — see README), so the only access
  * control available is "how often has this client hit this endpoint" —
  * this is that check.
@@ -55,7 +55,7 @@ export function getClientIp(req: Request): string {
 }
 
 function hashClientKey(ip: string): string {
-  const salt = process.env.RATE_LIMIT_SALT || "palmara-default-salt";
+  const salt = process.env.RATE_LIMIT_SALT || "palmistica-default-salt";
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 

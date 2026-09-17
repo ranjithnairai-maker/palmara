@@ -50,21 +50,21 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   title: {
-    default: "Palmara — Read your palm",
-    template: "%s · Palmara",
+    default: "Palmistica — Read your palm",
+    template: "%s · Palmistica",
   },
   description:
-    "Palmara reads your palm with the eye of a modern palmist — the four major lines, your hand's element, and one warm holistic reflection. Upload or snap a photo to begin.",
+    "Palmistica reads your palm with the eye of a modern palmist — the four major lines, your hand's element, and one warm holistic reflection. Upload or snap a photo to begin.",
   openGraph: {
-    title: "Palmara — Read your palm",
+    title: "Palmistica — Read your palm",
     description:
       "A modern palm reading grounded in real palmistry. Upload or snap a photo of your palm and ask the reader anything.",
     type: "website",
-    siteName: "Palmara",
+    siteName: "Palmistica",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Palmara — Read your palm",
+    title: "Palmistica — Read your palm",
     description:
       "A modern palm reading grounded in real palmistry. Upload or snap a photo of your palm.",
   },

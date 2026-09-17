@@ -1,12 +1,12 @@
 # Security Rules — Always Follow These
 
-This file is the security contract for Palmara. It's written to be read by
+This file is the security contract for Palmistica. It's written to be read by
 both humans and Claude Code before any change that touches secrets, data
 access, or user input. If a change conflicts with something here, the
 change is wrong until this file is updated on purpose — not the other way
 around.
 
-> **A note on scope, read first:** Palmara has **no user accounts, no login,
+> **A note on scope, read first:** Palmistica has **no user accounts, no login,
 > and no admin role** — that's a deliberate product decision (see
 > [README.md](README.md)), not an oversight. A reading is a public,
 > unguessable-URL resource (`/r/[id]`, `/reading/[id]`), like a Google Doc
@@ -26,7 +26,7 @@ around.
 - The Supabase `service_role` key must NEVER appear in any client-side or
   frontend code — server-side only.
 
-**How this is enforced in Palmara:**
+**How this is enforced in Palmistica:**
 - `lib/supabase.ts` is the only module that reads `SUPABASE_SERVICE_ROLE_KEY`,
   and it is imported exclusively by Route Handlers (`app/api/**/route.ts`)
   and Server Components (`app/reading/[id]/page.tsx`, `app/r/[id]/page.tsx`)
@@ -41,7 +41,7 @@ around.
 ## Authentication & Access Control
 
 - Every API route must verify authentication before processing requests.
-  *Adapted: Palmara has no auth to check — every route is intentionally
+  *Adapted: Palmistica has no auth to check — every route is intentionally
   public. Instead, every route validates its inputs (UUID shape, image
   type/size, question length) and is rate-limited (see below) before doing
   any expensive or storage-writing work.*
@@ -53,7 +53,7 @@ around.
 - Never trust user-supplied IDs without verifying the requesting user
   actually owns that resource. *Adapted: there is no ownership model —
   anyone who has a reading's id can view it and continue its chat, exactly
-  like a shared-link doc. That's the product. What Palmara does verify: the
+  like a shared-link doc. That's the product. What Palmistica does verify: the
   id is a well-formed UUID (`isUuid()`) before it ever reaches a database
   query, and every read goes through parameterized Supabase client calls
   (`.eq("id", id)`), never string-built SQL.*

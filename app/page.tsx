@@ -13,7 +13,7 @@ const STEPS = [
   {
     numeral: "II",
     title: "Contemplate",
-    body: "Palmara studies your hand's shape and its four major lines, reading length, depth, curve, and break the way a palmist would.",
+    body: "Palmistica studies your hand's shape and its four major lines, reading length, depth, curve, and break the way a palmist would.",
   },
   {
     numeral: "III",
@@ -59,7 +59,7 @@ export default function LandingPage() {
               <span className="text-gilt">been keeping notes.</span>
             </h1>
             <p className="mt-6 max-w-md text-base leading-relaxed text-cream-muted">
-              Palmara reads your palm with the eye of a modern palmist — your
+              Palmistica reads your palm with the eye of a modern palmist — your
               hand&rsquo;s element, the four major lines, and one warm reflection
               that ties them together. Then it stays to answer your questions.
             </p>
@@ -110,7 +110,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* What Palmara reads */}
+        {/* What Palmistica reads */}
         <section className="mx-auto w-full max-w-5xl px-6 py-16">
           <div className="mystic-card overflow-hidden">
             <div className="grid gap-10 p-8 sm:p-12 md:grid-cols-[0.8fr_1.2fr] md:items-center">

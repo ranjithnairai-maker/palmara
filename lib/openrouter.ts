@@ -97,9 +97,9 @@ async function callOpenRouterOnce(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "X-Title": "Palmara",
+        "X-Title": "Palmistica",
         "HTTP-Referer":
-          process.env.NEXT_PUBLIC_SITE_URL || "https://palmara.app",
+          process.env.NEXT_PUBLIC_SITE_URL || "https://palmistica.com",
       },
       body: JSON.stringify({
         model: getModel(),

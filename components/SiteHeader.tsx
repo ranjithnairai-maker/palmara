@@ -8,7 +8,7 @@ export function SiteHeader() {
           <span className="text-lg leading-none text-gold">✦</span>
           <span className="absolute inset-0 rounded-full [animation:var(--animate-glow-pulse)] opacity-40 transition-opacity group-hover:opacity-70" />
         </span>
-        <span className="font-serif text-xl tracking-wide text-cream">Palmara</span>
+        <span className="font-serif text-xl tracking-wide text-cream">Palmistica</span>
       </Link>
       <Link
         href="/read"

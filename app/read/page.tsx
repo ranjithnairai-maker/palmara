@@ -130,7 +130,7 @@ export default function ReadPage() {
       // delete control shows up, nothing else in the flow depends on it.
       if (data.ownerToken) {
         try {
-          localStorage.setItem(`palmara_owner_${data.id}`, data.ownerToken);
+          localStorage.setItem(`palmistica_owner_${data.id}`, data.ownerToken);
         } catch {
           /* storage unavailable — delete control just won't show later */
         }
@@ -164,7 +164,7 @@ export default function ReadPage() {
             <div className="text-center">
               <p className="eyebrow">Begin</p>
               <h1 className="mt-3 font-serif text-3xl sm:text-4xl">
-                Show Palmara your palm
+                Show Palmistica your palm
               </h1>
               <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-cream-muted">
                 Upload a photo or take one now. You&rsquo;ll see it before

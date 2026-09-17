@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -5,6 +6,7 @@ import { ReadingView } from "@/components/ReadingView";
 import { RemovedNotice } from "@/components/RemovedNotice";
 import {
   getReading,
+  getReadingOgData,
   getMessages,
   getSignedImageUrl,
   isUuid,
@@ -16,19 +18,43 @@ import type { ReadingPayload } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function generateMetadata(props: PageProps<"/r/[id]">) {
+// noindex is deliberate and independent of the rich sharing metadata below:
+// a reading is a public, unguessable-URL resource (like a shared-link doc,
+// see SECURITY.md), not something meant to turn up in search results —
+// noindex only affects search engines, never social share previews.
+const NO_INDEX: Pick<Metadata, "robots"> = { robots: { index: false, follow: false } };
+
+export async function generateMetadata(props: PageProps<"/r/[id]">): Promise<Metadata> {
   const { id } = await props.params;
-  if (!isUuid(id)) return { title: "Reading not found" };
-  const reading = await getReading(id).catch(() => null);
-  if (!reading || reading.status !== "complete") {
-    return { title: "A palm reading" };
-  }
+  if (!isUuid(id)) return { title: "Reading not found", ...NO_INDEX };
+
+  const og = await getReadingOgData(id).catch(() => null);
+  if (!og) return { title: "A palm reading", ...NO_INDEX };
+
+  const headline = og.headline || "A reading, written for one hand only.";
+  // Deliberately distinct from the headline above — some platforms show
+  // the OG title and description side by side, and duplicating the same
+  // line there reads as lazy/templated.
+  const article = og.handElement && /^[aeiou]/i.test(og.handElement) ? "an" : "a";
+  const description = og.handElement
+    ? `Read as ${article} ${og.handElement} hand, the four major lines, and one warm reflection — free at Palmistica.`
+    : "The four major lines, the hand's element, and one warm reflection — read free at Palmistica.";
+
   return {
-    title: reading.hand_element
-      ? `A ${reading.hand_element}-hand reading`
-      : "A palm reading",
-    description:
-      "A palm reading from Palmara — the four major lines, the hand's element, and one warm reflection.",
+    // Root layout's title template ("%s · Palmistica") already appends the
+    // brand name — don't add it again here.
+    title: headline,
+    description,
+    ...NO_INDEX,
+    openGraph: {
+      url: `/r/${id}`,
+      type: "website",
+      // opengraph-image.tsx in this same route segment is picked up
+      // automatically — don't also list `images` here, or it duplicates.
+    },
+    twitter: {
+      card: "summary_large_image",
+    },
   };
 }
 
@@ -111,7 +137,7 @@ function ShareHeader() {
           ✦
         </span>
         <span className="font-serif text-xl tracking-wide text-cream">
-          Palmara
+          Palmistica
         </span>
       </Link>
       <Link href="/read" className="btn-ghost !px-5 !py-2 text-xs uppercase tracking-[0.14em]">

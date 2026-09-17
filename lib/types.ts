@@ -17,6 +17,9 @@ export interface AnalysisJson {
     fate: AnalysisLine;
   };
   mounts: string;
+  /** Short (8-12 word), curiosity-driving title for this specific reading —
+   * used as the share-link preview title (see app/r/[id]/opengraph-image.tsx). */
+  headline: string;
 }
 
 /** Structured output of the on-demand Detailed Reading call. */

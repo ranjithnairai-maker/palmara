@@ -92,6 +92,30 @@ export async function addMessage(
   return data as ReadingMessage;
 }
 
+export interface OgReadingData {
+  headline: string | null;
+  handElement: string | null;
+}
+
+/** Narrow query for share-image rendering (opengraph-image.tsx /
+ * twitter-image.tsx) — only the two fields the image needs, never the full
+ * reading or the photo. Keeps image generation fast and independent of the
+ * 90-day photo-retention prune. Returns null for anything not a complete,
+ * viewable reading (missing, still processing, or deleted). */
+export async function getReadingOgData(id: string): Promise<OgReadingData | null> {
+  const { data, error } = await supabaseAdmin
+    .from("readings")
+    .select("analysis_json, hand_element, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data || data.status !== "complete") return null;
+  const analysis = data.analysis_json as AnalysisJson | null;
+  return {
+    headline: analysis?.headline?.trim() || null,
+    handElement: (data.hand_element as string | null) ?? null,
+  };
+}
+
 export async function getReading(id: string): Promise<Reading | null> {
   const { data, error } = await supabaseAdmin
     .from("readings")
