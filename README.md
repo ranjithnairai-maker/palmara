@@ -28,7 +28,7 @@ Open http://localhost:3000.
 | Variable | Where to get it |
 | --- | --- |
 | `OPENROUTER_API_KEY` | https://openrouter.ai/keys |
-| `OPENROUTER_MODEL` | Any image-capable model id from https://openrouter.ai/models. Default `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` (free, multimodal, slow). Swap to a paid vision model — e.g. `google/gemini-2.0-flash-001` — with no code changes. |
+| `OPENROUTER_MODEL` | Any image-capable model id from https://openrouter.ai/models. Default `inclusionai/ling-3.0-flash-vl:free` (free, multimodal; reasons heavily before answering, so calls budget generous `maxTokens`). Swap to a paid vision model — e.g. `google/gemini-2.0-flash-001` — with no code changes. |
 | `SUPABASE_URL` | Supabase → Project Settings → Data API → Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → `service_role`. **Server-side only. Never expose to the client.** |
 | `NEXT_PUBLIC_SITE_URL` | Optional. Canonical origin for absolute share links (e.g. `https://palmara.vercel.app`). Falls back to the Vercel URL, then the request host. |

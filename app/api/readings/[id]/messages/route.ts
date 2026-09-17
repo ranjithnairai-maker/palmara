@@ -93,12 +93,14 @@ export async function POST(
     const raw = await callOpenRouter({
       messages,
       temperature: 0.8,
-      maxTokens: 900,
+      // Generous — this model spends a large share of its output budget on
+      // internal reasoning before emitting the actual reply; too tight a
+      // cap here silently truncates to empty content (see lib/generateReading.ts).
+      maxTokens: 2500,
       // Vercel hard-kills this function at 60s with a platform crash page
       // (not JSON), regardless of maxDuration — leave real headroom so a
-      // slow model resolves to our own friendly error instead. (48s wasn't
-      // conservative enough in practice — see lib/generateReading.ts.)
-      timeoutMs: 35_000,
+      // slow model resolves to our own friendly error instead.
+      timeoutMs: 45_000,
     });
     answer = stripReasoning(raw) || raw.trim();
   } catch (err) {

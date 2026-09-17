@@ -45,17 +45,29 @@ runs TypeScript and fails on any type error.
      re-analysis) that expands `analysis_json` into `detailed_text`.
      **Idempotent** — returns the stored value without calling the model
      again if `detailed_text` already exists.
-  This split exists because the free vision model can take 40–65s, which is
-  too close to Vercel's function timeout to do synchronously in the create
-  request — and because Detailed Reading being optional means most readings
-  never pay for that second text call at all. Don't collapse these back
-  into fewer calls, and don't let Detailed re-send the image.
+  This split exists because the free vision model can take well past a
+  minute (especially the current default, `inclusionai/ling-3.0-flash-vl:free`,
+  which reasons heavily — thousands of reasoning tokens — before emitting
+  its actual answer), too close to Vercel's function timeout to do
+  synchronously in the create request — and because Detailed Reading being
+  optional means most readings never pay for that second text call at all.
+  Don't collapse these back into fewer calls, and don't let Detailed
+  re-send the image.
 - **`lib/openrouter.ts`** wraps the Chat Completions call. It classifies
   errors as rate-limited by **pattern-matching the error text**, not just
-  HTTP 429 — the free model's upstream (Nvidia) returns capacity errors as a
-  200/502 with `"ResourceExhausted: ... limit reached"` in the body. If you
-  see a new failure mode that's really "try again shortly," add its pattern
-  to `looksLikeCapacityError()` rather than inventing a new error path.
+  HTTP 429 — free-tier upstream providers return capacity errors as a
+  200/502 with things like `"ResourceExhausted: ... limit reached"` in the
+  body rather than a clean 429. If you see a new failure mode that's really
+  "try again shortly," add its pattern to `looksLikeCapacityError()` rather
+  than inventing a new error path. It also races the **entire**
+  fetch-then-parse sequence (not just the initial `fetch()`) against the
+  timeout — `fetch()` resolving only means headers arrived, and a stalled
+  response body was once left completely unprotected, silently hanging
+  until Vercel's own hard 60s kill fired instead of our friendly error.
+  Every `maxTokens` value in this codebase is deliberately generous for the
+  same reason: the current model spends a large share of its output budget
+  on internal reasoning before the real answer, and too tight a cap
+  silently truncates to empty content rather than an error you'd notice.
 - **`lib/generateReading.ts` / `lib/parse.ts`** — `parseAnalysis()` parses
   the vision model's reply into `AnalysisJson` (per-line `traits` +
   `takeaway`, `mounts`); `parseDetailedReading()` parses the Detailed

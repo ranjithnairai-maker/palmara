@@ -19,14 +19,16 @@ export type GenerateResult =
 const DETAILED_BACKGROUND_TIMEOUT_MS = 50_000;
 
 // Vercel Hobby hard-kills a function at 60s with a platform crash page (not
-// JSON our client can read) regardless of `maxDuration` in the route. A 48s
-// internal budget turned out not to be conservative enough in practice —
-// on a saturated free model, the OpenRouter request itself can simply hang
-// with no response for 45-50+s (confirmed by direct testing, not just
-// failing fast), and cold start + DB round trips + serialization eat
-// further into the remaining ~12s, occasionally still crossing 60s. Budget
-// well below that instead so our own abort reliably wins the race.
-const FUNCTION_TIME_BUDGET_MS = 35_000;
+// JSON our client can read) regardless of `maxDuration` in the route — so
+// this stays comfortably under that regardless of model. The current model
+// (inclusionai/ling-3.0-flash-vl:free) reasons heavily before answering
+// (thousands of reasoning tokens even for a short final answer) and its
+// vision analysis call alone measured 20-30s in testing, so this needs
+// more headroom than a lighter model would; the real safety net is
+// openrouter.ts racing the whole fetch-then-parse sequence against this
+// budget, so exceeding it always resolves to a clean 'failed' status
+// rather than a platform crash either way.
+const FUNCTION_TIME_BUDGET_MS = 45_000;
 const MIN_USEFUL_CALL_MS = 4_000; // below this, don't even attempt a call
 
 function friendlyModelError(err: unknown): { kind: "rate_limited" | "model_error"; message: string } {
@@ -75,7 +77,10 @@ export async function generateAndPersistReading(
         },
       ],
       temperature: 0.7,
-      maxTokens: 1400,
+      // Generous — this model spends a large share of its output budget on
+      // internal reasoning before ever emitting the actual JSON answer;
+      // too tight a cap here silently truncates to empty content.
+      maxTokens: 4000,
       timeoutMs: deadline - Date.now(),
     });
   } catch (err) {
@@ -116,7 +121,7 @@ export async function generateAndPersistReading(
           { role: "user", content: JSON.stringify(analysis) },
         ],
         temperature: 0.85,
-        maxTokens: 700,
+        maxTokens: 2500,
         timeoutMs: remaining,
       });
       quickInsights = stripReasoning(raw) || raw.trim();
@@ -181,7 +186,11 @@ export async function runDetailedReadingGeneration(readingId: string): Promise<v
         { role: "user", content: JSON.stringify(reading.analysis_json) },
       ],
       temperature: 0.85,
-      maxTokens: 2200,
+      // Generous for the same reasoning-overhead reason as the analysis
+      // call above, and this is the largest completion in the app (~700
+      // words across 7 fields) — this runs backgrounded (see the function
+      // doc above), so a longer cap costs time, not a blocked client.
+      maxTokens: 6000,
       timeoutMs: DETAILED_BACKGROUND_TIMEOUT_MS,
     });
   } catch (err) {

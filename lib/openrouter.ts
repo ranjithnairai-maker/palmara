@@ -1,7 +1,6 @@
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export const DEFAULT_MODEL =
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
+export const DEFAULT_MODEL = "inclusionai/ling-3.0-flash-vl:free";
 
 export function getModel(): string {
   return process.env.OPENROUTER_MODEL?.trim() || DEFAULT_MODEL;
