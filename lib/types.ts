@@ -20,6 +20,11 @@ export interface AnalysisJson {
   /** Short (8-12 word), curiosity-driving title for this specific reading —
    * used as the share-link preview title (see app/r/[id]/opengraph-image.tsx). */
   headline: string;
+  /** 5 follow-up questions grounded in this specific palm, shown as chips
+   * under the reading (see ReadingView.tsx). Empty on readings generated
+   * before this field existed — callers should fall back to
+   * SUGGESTED_QUESTIONS in lib/prompts.ts when empty. */
+  suggestedQuestions: string[];
 }
 
 /** Structured output of the on-demand Detailed Reading call. */

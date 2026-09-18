@@ -112,6 +112,14 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
     return `${window.location.origin}/r/${shareId}`;
   }, [shareId]);
 
+  // Readings generated before analysis_json carried suggested_questions
+  // (or where the model just didn't return any) fall back to the static
+  // list rather than showing no chips at all.
+  const suggestedQuestions =
+    reading.analysis_json?.suggestedQuestions?.length
+      ? reading.analysis_json.suggestedQuestions
+      : SUGGESTED_QUESTIONS;
+
   async function sendQuestion(question: string) {
     const text = question.trim();
     if (!text || sending) return;
@@ -462,7 +470,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
           {/* Suggested questions */}
           {!readOnly && (
             <div className="mt-5 flex flex-wrap gap-2">
-              {SUGGESTED_QUESTIONS.map((q) => (
+              {suggestedQuestions.map((q) => (
                 <button
                   key={q}
                   type="button"

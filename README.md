@@ -171,7 +171,7 @@ else ever gets added on it later).
 
 ### Nice-to-haves (not built)
 
-Suggested-question chips beyond the default static set — e.g. generated
-per-reading from `analysis_json` rather than the same five questions for
-everyone. (Rate limiting and image retention were on this list originally —
-both are now built, see Security above and "How it works.")
+Nothing outstanding right now. (Rate limiting, image retention, and
+per-reading suggested-question chips were all on this list originally —
+all three are now built; see Security above, "How it works," and
+`lib/prompts.ts`'s `ANALYSIS_SYSTEM` for the chips.)

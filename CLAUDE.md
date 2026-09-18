@@ -171,6 +171,15 @@ runs TypeScript and fails on any type error.
   listing them again would duplicate. `/r/[id]` stays `noindex` throughout
   — that's independent of and doesn't conflict with rich share previews,
   it only affects search engines.
+- **Per-reading suggested-question chips.** Same pattern as the headline
+  above: the analysis call also returns `suggested_questions` (5 items,
+  grounded in that specific palm), stored as `suggestedQuestions` on
+  `AnalysisJson` — no extra model call. `ReadingView.tsx` falls back to the
+  static `SUGGESTED_QUESTIONS` list (`lib/prompts.ts`) whenever that array
+  is empty, which covers both a model that ignores the instruction and
+  every reading generated before this field existed (their stored
+  `analysis_json` simply has no `suggestedQuestions` key) — never assume
+  it's present.
 
 ## Conventions
 

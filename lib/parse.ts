@@ -23,6 +23,19 @@ function str(value: unknown, fallback = ""): string {
     : fallback;
 }
 
+// Tolerant of the model returning fewer/more than 5, non-string entries, or
+// omitting the field entirely (older prompt versions, or a model that just
+// didn't follow instructions) — callers fall back to the static
+// SUGGESTED_QUESTIONS list when this comes back empty, so returning []
+// here is always safe rather than something to guard against upstream.
+function strArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .map((v) => sanitizeReadingText(v.trim()))
+    .slice(0, 5);
+}
+
 /** Pulls the first balanced-looking JSON object out of a string. */
 function extractJsonObject(text: string): string | null {
   const start = text.indexOf("{");
@@ -114,6 +127,7 @@ export function parseAnalysis(raw: string): ParsedAnalysis {
     lines,
     mounts: str(obj.mounts),
     headline: str(obj.headline, "A reading, written for one hand only."),
+    suggestedQuestions: strArray(obj.suggested_questions),
   };
 
   return { isPalm: true, analysis, clarification: null };

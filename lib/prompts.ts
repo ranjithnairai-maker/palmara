@@ -64,6 +64,14 @@ You will be given a single photo. Do the following:
    examples (do not reuse verbatim): "Your palm reveals a fork in your
    path this year." / "A rare fire hand — with a heart line that surprised
    us."
+6. Write 5 short follow-up questions the querent might want to ask next,
+   each grounded in something specific THIS palm actually showed (not
+   generic palmistry trivia) — e.g. if the fate line reading noted it's
+   faint and fragmented, a question might ask what that means for their
+   career path, not a generic "tell me about my fate line." Phrase them
+   the way the querent would ask them, in first person ("What does my..."),
+   short enough to fit on a button (under ~9 words each). Draw from across
+   the whole analysis (element, all four lines, mounts), not just one line.
 
 Respond with ONLY a JSON object (no prose before or after, no code fence),
 matching exactly this shape:
@@ -80,7 +88,8 @@ matching exactly this shape:
     "fate":  { "traits": string, "takeaway": string }
   },
   "mounts": string,
-  "headline": string   // used only when is_palm is true — see point 5 above
+  "headline": string,            // used only when is_palm is true — see point 5 above
+  "suggested_questions": string[] // used only when is_palm is true — see point 6 above, exactly 5 items
 }
 
 Every string value is written directly for the querent's eventual reading —
