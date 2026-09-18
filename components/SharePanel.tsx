@@ -205,7 +205,13 @@ export function SharePanel({ shareUrl, size = "default" }: Props) {
         <div
           ref={panelRef}
           role="menu"
-          className="mystic-card absolute right-0 top-[calc(100%+0.6rem)] z-20 w-64 p-2.5"
+          // Anchored from the trigger's left edge on narrow screens instead
+          // of its right edge — the trigger sits close to the left edge of
+          // the viewport on mobile, and right-0 pushed a fixed w-64 panel
+          // partly off-screen to the left. max-w keeps it on-screen even
+          // on very narrow devices. Reverts to the original right-anchored
+          // behavior from `sm` up, where there's room either way.
+          className="mystic-card absolute left-0 top-[calc(100%+0.6rem)] z-20 w-64 max-w-[calc(100vw-2rem)] p-2.5 sm:left-auto sm:right-0"
         >
           {view === "menu" ? (
             <>

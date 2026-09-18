@@ -131,16 +131,22 @@ export default async function SharePage(props: PageProps<"/r/[id]">) {
 
 function ShareHeader() {
   return (
-    <header className="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
-      <Link href="/" className="flex items-center gap-2.5">
-        <span className="grid h-9 w-9 place-items-center rounded-full border border-[rgba(217,178,94,0.4)] bg-[rgba(61,31,79,0.35)] text-lg text-gold">
+    <header className="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-6">
+      <Link href="/" className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[rgba(217,178,94,0.4)] bg-[rgba(61,31,79,0.35)] text-base text-gold sm:h-9 sm:w-9 sm:text-lg">
           ✦
         </span>
-        <span className="font-serif text-xl tracking-wide text-cream">
+        <span className="truncate font-serif text-lg tracking-wide text-cream sm:text-xl">
           Palmistica
         </span>
       </Link>
-      <Link href="/read" className="btn-ghost !px-5 !py-2 text-xs uppercase tracking-[0.14em]">
+      {/* whitespace-nowrap: btn-ghost is inline-flex, which doesn't stop
+       * its own text node from wrapping — this label wrapped to two lines
+       * and collided with the logo on narrow screens without it. */}
+      <Link
+        href="/read"
+        className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-[10px] uppercase tracking-[0.08em] sm:!px-5 sm:!py-2 sm:text-xs sm:tracking-[0.14em]"
+      >
         Get your own reading
       </Link>
     </header>
