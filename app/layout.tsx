@@ -15,10 +15,23 @@ const inter = Inter({
   display: "swap",
 });
 
+// A hostname with no dot (and isn't localhost) is never a real production
+// domain — but new URL("https://" + candidate) happily "succeeds" on one
+// anyway (e.g. a NEXT_PUBLIC_SITE_URL accidentally set to a bare path like
+// "ranjithnairai-maker/palmara" parses as host "ranjithnairai-maker", path
+// "/palmara"). That shipped to production once already: every absolute URL
+// the app generated (canonical share links, OG/Twitter image URLs) pointed
+// at an unreachable host, silently, because nothing here rejected it.
+function looksLikeRealHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname.includes(".");
+}
+
 /**
- * Picks the first candidate that parses as an absolute URL, trying a bare
- * host (Vercel's env vars have no scheme) before an as-given value. Falls
- * back to localhost so a misconfigured env var never fails the build.
+ * Picks the first candidate that parses as an absolute URL with a plausible
+ * hostname, trying a bare host (Vercel's env vars have no scheme) before an
+ * as-given value. Falls back to localhost so a misconfigured env var never
+ * fails the build — but also never silently produces a broken URL when a
+ * later candidate (Vercel's own auto-populated production URL) would work.
  */
 function resolveSiteUrl(): URL {
   const candidates = [
@@ -31,7 +44,8 @@ function resolveSiteUrl(): URL {
     if (!candidate) continue;
     for (const attempt of [candidate, `https://${candidate}`]) {
       try {
-        return new URL(attempt);
+        const url = new URL(attempt);
+        if (looksLikeRealHost(url.hostname)) return url;
       } catch {
         // try the next form / candidate
       }

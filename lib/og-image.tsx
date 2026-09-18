@@ -6,11 +6,27 @@ export const OG_SIZE = { width: 1200, height: 630 } as const;
 const FALLBACK_HEADLINE = "A palm reading, written for one hand only.";
 const GONE_HEADLINE = "This reading is no longer available.";
 
-// Cache header for a fully-generated image: reading content is immutable
-// once generated (until the owner deletes it), so cache aggressively at
-// the CDN edge — long enough to be "aggressive," short enough that a
-// deletion (rare) isn't stuck forever behind a stale cached preview.
-const CACHE_CONTROL = "public, max-age=3600, s-maxage=31536000, stale-while-revalidate=86400";
+// Reading content is immutable once generated (until the owner deletes it),
+// so cache aggressively — long enough to be "aggressive," short enough
+// that a deletion (rare) isn't stuck forever behind a stale cached
+// preview. This route reads live data (a Supabase query per request), so
+// Next's own static-route caching doesn't apply and everything here rides
+// on response headers instead. Vercel strips shared-cache directives
+// (s-maxage, stale-while-revalidate) out of a plain Cache-Control header
+// before it reaches the client — confirmed in production, every request
+// including repeats came back X-Vercel-Cache: MISS despite this route
+// setting s-maxage — so the actual CDN-edge cache duration has to go on
+// Vercel's own CDN-Cache-Control / Vercel-CDN-Cache-Control headers
+// instead; Cache-Control here is just the plain browser-facing hint.
+// Slow crawlers (LinkedIn's has a notably short fetch timeout) hitting an
+// uncached cold render is a real failure mode this fixes, not just a
+// performance nicety.
+const EDGE_CACHE = "public, s-maxage=31536000, stale-while-revalidate=86400";
+const RESPONSE_HEADERS = {
+  "Cache-Control": "public, max-age=3600",
+  "CDN-Cache-Control": EDGE_CACHE,
+  "Vercel-CDN-Cache-Control": EDGE_CACHE,
+};
 
 let fontPromise: Promise<ArrayBuffer> | null = null;
 
@@ -187,7 +203,7 @@ async function render(headline: string): Promise<ImageResponse> {
   return new ImageResponse(<Frame headline={headline} />, {
     ...OG_SIZE,
     fonts: [{ name: "Playfair Display", data: fontData, weight: 700, style: "normal" }],
-    headers: { "Cache-Control": CACHE_CONTROL },
+    headers: RESPONSE_HEADERS,
   });
 }
 

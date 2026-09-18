@@ -14,6 +14,7 @@ import { PalmMarkdown } from "./PalmMarkdown";
 import { PalmGlyph } from "./PalmGlyph";
 import { SectionGlyph } from "./SectionGlyph";
 import { TipJar } from "./TipJar";
+import { SharePanel } from "./SharePanel";
 import { DeleteReadingControl } from "./DeleteReadingControl";
 import { SUGGESTED_QUESTIONS } from "@/lib/prompts";
 import type { DetailedSections, ReadingMessage, ReadingPayload } from "@/lib/types";
@@ -45,7 +46,6 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [waitedTooLong, setWaitedTooLong] = useState(false);
   // "Triggering" covers only the brief window between clicking Reveal and
   // the kickoff POST responding; the actual generation is tracked via
@@ -200,16 +200,6 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
     }
   }
 
-  async function copyShare() {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2200);
-    } catch {
-      setCopied(false);
-    }
-  }
-
   // ---- Processing ---------------------------------------------------------
   if (reading.status === "processing") {
     return (
@@ -305,15 +295,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
           </span>
         </div>
 
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={copyShare}
-            className="btn-ghost !py-2 text-xs"
-          >
-            {copied ? "Link copied ✓" : "Copy share link"}
-          </button>
-        )}
+        {!readOnly && <SharePanel shareUrl={shareUrl} />}
       </div>
 
       <div className="mt-8 grid gap-10 md:grid-cols-[minmax(0,320px)_1fr]">
