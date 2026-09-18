@@ -183,3 +183,16 @@ export function stripReasoning(text: string): string {
     .replace(/^\s*(?:reasoning|analysis):[\s\S]*?(?=\n\s*\n)/i, "")
     .trim();
 }
+
+// Seen in production: this model doesn't always wrap its reasoning in
+// <think> tags or a "reasoning:" field — sometimes it narrates its entire
+// drafting process (word counts, redrafts, a "final version" it then
+// second-guesses) directly as plain content, with no delimiter stripReasoning()
+// can key off. The persona instructs it not to, but that's a mitigation, not
+// a guarantee on a free/flaky model, so call sites with no JSON envelope to
+// fall back on (Quick Insights, chat) treat this as a failed call rather
+// than storing/showing the leaked transcript.
+const REASONING_LEAK_MARKERS = /\b(let me|i need to|now let me|final version|word count)\b/gi;
+export function looksLikeReasoningLeak(text: string): boolean {
+  return (text.match(REASONING_LEAK_MARKERS) ?? []).length >= 2;
+}

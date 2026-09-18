@@ -1,4 +1,4 @@
-import { callOpenRouter, OpenRouterError, stripReasoning } from "./openrouter";
+import { callOpenRouter, OpenRouterError, stripReasoning, looksLikeReasoningLeak } from "./openrouter";
 import {
   ANALYSIS_SYSTEM,
   DETAILED_READING_SYSTEM,
@@ -125,7 +125,15 @@ export async function generateAndPersistReading(
         maxTokens: 2500,
         timeoutMs: remaining,
       });
-      quickInsights = stripReasoning(raw) || raw.trim();
+      const cleaned = stripReasoning(raw) || raw.trim();
+      // Quick Insights has no JSON envelope to extract the real answer
+      // from, unlike the analysis/Detailed Reading calls — so a leaked
+      // reasoning transcript (see looksLikeReasoningLeak's doc comment) has
+      // nothing to fall back to except the same stitched-analysis fallback
+      // used for an outright call failure.
+      quickInsights = looksLikeReasoningLeak(cleaned)
+        ? fallbackQuickInsights(analysis)
+        : cleaned;
     } catch (err) {
       // The (expensive) image analysis already succeeded — don't discard
       // it. Fall back to a plain-language stitch of the analysis so the

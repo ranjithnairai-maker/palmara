@@ -5,6 +5,7 @@ import { parseDetailedReading } from "@/lib/parse";
 import {
   callOpenRouter,
   stripReasoning,
+  looksLikeReasoningLeak,
   OpenRouterError,
   type ChatMessage,
 } from "@/lib/openrouter";
@@ -103,7 +104,18 @@ export async function POST(
       // slow model resolves to our own friendly error instead.
       timeoutMs: 45_000,
     });
-    answer = sanitizeReadingText(stripReasoning(raw) || raw.trim());
+    const cleaned = stripReasoning(raw) || raw.trim();
+    // No JSON envelope to fall back on here either (see
+    // lib/generateReading.ts's use of the same check) — a leaked reasoning
+    // transcript has nothing usable to salvage, so treat it like a failed
+    // call rather than saving/showing it.
+    if (looksLikeReasoningLeak(cleaned)) {
+      return NextResponse.json(
+        { error: "The reader lost the thread there. Please ask again.", kind: "model_error" },
+        { status: 502 },
+      );
+    }
+    answer = sanitizeReadingText(cleaned);
   } catch (err) {
     const isRate = err instanceof OpenRouterError && err.isRateLimit;
     return NextResponse.json(
