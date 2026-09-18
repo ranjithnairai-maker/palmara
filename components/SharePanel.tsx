@@ -23,6 +23,17 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+// Feature-detecting navigator.share alone isn't enough to mean "this is a
+// phone" — Windows' Chrome/Edge also implements the Web Share API and
+// hands off to the OS's own native share flyout (Nearby Sharing, Outlook,
+// Teams, Copilot, etc.) instead of this component's panel, which defeats
+// the whole point of the mystical styling, the QR code, and the clearer
+// Copy Link/QR Code labeling built for it. Same UA check as the rest of
+// the app uses for "is this a phone."
+function isMobileDevice(): boolean {
+  return /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+}
+
 /**
  * Instagram has no web link that opens a pre-filled post or story caption,
  * so this is deliberately the clunkiest option: copy a ready-to-paste
@@ -32,8 +43,7 @@ async function copyText(text: string): Promise<boolean> {
  * after — a common pattern for this kind of soft app handoff.
  */
 function openInstagram() {
-  const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
-  if (!isMobile) {
+  if (!isMobileDevice()) {
     openInNewTab("https://www.instagram.com/");
     return;
   }
@@ -60,13 +70,14 @@ const UTILITY_ROWS: { kind: UtilityKind; label: string; caption: string }[] = [
 ];
 
 /**
- * Replaces the old plain "Copy share link" button. On a device with the Web
- * Share API (most phones), the OS's own share sheet is the primary path —
- * it already puts WhatsApp, Messages, Instagram etc. right there, and
- * usually handles text + link better than any single platform link can.
- * The panel below is the fallback for everywhere else (desktop browsers,
- * mostly), plus it's the only place Instagram's copy-caption flow and the
- * QR code live, since neither has a share-sheet equivalent.
+ * Replaces the old plain "Copy share link" button. On a phone, the OS's own
+ * share sheet is the primary path (see isMobileDevice() above for why this
+ * is gated on more than just feature-detecting navigator.share) — it
+ * already puts WhatsApp, Messages, Instagram etc. right there, and usually
+ * handles text + link better than any single platform link can. The panel
+ * below is what desktop always gets, plus it's the only place Instagram's
+ * copy-caption flow and the QR code live, since neither has a share-sheet
+ * equivalent.
  *
  * Not all five platform buttons behave the same way — see the doc comments
  * on the per-platform functions below before changing one. Facebook and
@@ -110,7 +121,7 @@ export function SharePanel({ shareUrl, size = "default" }: Props) {
     const nav = navigator as Navigator & {
       share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
     };
-    if (typeof nav.share === "function") {
+    if (isMobileDevice() && typeof nav.share === "function") {
       try {
         await nav.share({ title: "Palmistica", text: pickShareMessage(), url: shareUrl });
         return;
