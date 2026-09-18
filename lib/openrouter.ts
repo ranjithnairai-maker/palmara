@@ -91,6 +91,14 @@ async function callOpenRouterOnce(
   // which wasn't reliably rejecting a stalled connection either) so nothing
   // downstream of the initial response can silently hang forever.
   async function fetchAndParse(): Promise<string> {
+    // Not a secret (it's a public OpenRouter model id, not a key) and
+    // worth always logging: OPENROUTER_MODEL is easy to leave stale in
+    // Vercel's dashboard after a code-level default change, since env vars
+    // there are masked and only visible by editing each one individually —
+    // this line lets you confirm which model actually served a given
+    // request straight from Vercel's Runtime Logs instead.
+    const model = getModel();
+    console.log(`[openrouter] model=${model}`);
     const res = await fetch(OPENROUTER_URL, {
       method: "POST",
       signal: controller.signal,
@@ -102,7 +110,7 @@ async function callOpenRouterOnce(
           process.env.NEXT_PUBLIC_SITE_URL || "https://palmistica.com",
       },
       body: JSON.stringify({
-        model: getModel(),
+        model,
         messages,
         temperature,
         max_tokens: maxTokens,
