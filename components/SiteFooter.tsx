@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL;
 
 export function SiteFooter() {
@@ -6,10 +8,29 @@ export function SiteFooter() {
       <hr className="hairline mb-6" />
       <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:justify-between sm:text-left">
         <p className="font-serif text-sm text-cream-muted">Palmistica</p>
-        <p className="max-w-md text-xs leading-relaxed text-cream-faint">
-          Palmistica offers reflective readings for curiosity and entertainment. It is
-          not a source of medical, financial, or legal advice.
-        </p>
+        <div className="max-w-md text-xs leading-relaxed text-cream-faint">
+          <p>
+            Palmistica offers reflective readings for curiosity and entertainment. It is
+            not a source of medical, financial, or legal advice.
+          </p>
+          <p className="mt-2 flex items-center justify-center gap-3 sm:justify-start">
+            <Link
+              href="/privacy"
+              className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+            >
+              Privacy Policy
+            </Link>
+            <span aria-hidden className="text-[rgba(217,178,94,0.3)]">
+              ·
+            </span>
+            <Link
+              href="/terms"
+              className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+            >
+              Terms of Use
+            </Link>
+          </p>
+        </div>
       </div>
       {CONTACT_EMAIL && (
         <p className="mt-4 text-center text-[11px] text-cream-faint sm:text-left">
