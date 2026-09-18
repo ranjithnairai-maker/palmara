@@ -67,7 +67,7 @@ export default async function ReadingPage(props: PageProps<"/reading/[id]">) {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader ctaLabel="Redo Palm Reading" />
       <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-6 py-10">
         <ReadingView initial={payload} shareId={id} />
       </main>

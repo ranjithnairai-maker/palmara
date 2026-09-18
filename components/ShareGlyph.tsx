@@ -1,4 +1,4 @@
-type Kind = "whatsapp" | "facebook" | "linkedin" | "reddit" | "instagram" | "copy" | "share";
+type Kind = "whatsapp" | "facebook" | "linkedin" | "reddit" | "instagram" | "copy" | "qr" | "share";
 
 // Simple line-art marks in the app's own visual language (see
 // SectionGlyph.tsx) rather than literal brand logos — evocative of each
@@ -16,6 +16,7 @@ const PATHS: Record<Kind, string> = {
   instagram:
     "M7.5 3.5 H16.5 A4 4 0 0 1 20.5 7.5 V16.5 A4 4 0 0 1 16.5 20.5 H7.5 A4 4 0 0 1 3.5 16.5 V7.5 A4 4 0 0 1 7.5 3.5 Z M12 8.3 A3.7 3.7 0 1 0 12.01 8.3 Z M16.6 6.5 A0.6 0.6 0 1 0 16.61 6.5",
   copy: "M8 8 H16.5 A1.5 1.5 0 0 1 18 9.5 V18 A1.5 1.5 0 0 1 16.5 19.5 H8 A1.5 1.5 0 0 1 6.5 18 V9.5 A1.5 1.5 0 0 1 8 8 Z M9.5 8 V6 A1.5 1.5 0 0 1 11 4.5 H16 A1.5 1.5 0 0 1 17.5 6 V14 A1.5 1.5 0 0 1 16 15.5 H14.5",
+  qr: "M4 4 H9 V9 H4 Z M15 4 H20 V9 H15 Z M4 15 H9 V20 H4 Z M12.5 4 H14.5 V6.5 H12.5 Z M12.5 8 H14.5 V10.5 H12.5 Z M16.5 12 H18.5 V14.5 H16.5 Z M12.5 16 H14.5 V18.5 H12.5 Z M17 16.5 H19.5 V19 H17 Z",
   share:
     "M17.5 8.5 A2.2 2.2 0 1 0 17.49 8.5 Z M6.5 14.2 A2.2 2.2 0 1 0 6.49 14.2 Z M17.5 19.9 A2.2 2.2 0 1 0 17.49 19.9 Z M8.4 13 L15.6 9.6 M8.4 15.3 L15.6 18.7",
 };
@@ -26,7 +27,8 @@ const LABELS: Record<Kind, string> = {
   linkedin: "LinkedIn",
   reddit: "Reddit",
   instagram: "Instagram",
-  copy: "Copy link",
+  copy: "Copy Link",
+  qr: "QR Code",
   share: "Share",
 };
 

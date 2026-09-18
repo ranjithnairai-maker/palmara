@@ -55,6 +55,11 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
   const [detailedWaitedTooLong, setDetailedWaitedTooLong] = useState(false);
   const [detailedError, setDetailedError] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  // A plain incrementing counter, not Date.now()/crypto.randomUUID() — the
+  // React Compiler's purity lint rule flags any impure call reachable from
+  // a component function, even one that (like this) only ever runs inside
+  // an event handler, never during render.
+  const tmpMessageIdRef = useRef(0);
 
   const refetch = useCallback(async () => {
     const res = await fetch(`/api/readings/${shareId}`, { cache: "no-store" });
@@ -113,7 +118,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
     setChatError(null);
     setSending(true);
     const optimistic: ReadingMessage = {
-      id: `tmp-${Date.now()}`,
+      id: `tmp-${tmpMessageIdRef.current++}`,
       reading_id: shareId,
       role: "user",
       content: text,
@@ -553,6 +558,18 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
           )}
         </div>
       </div>
+
+      {!readOnly && (
+        <div className="mt-14 flex flex-wrap items-center justify-center gap-3 border-t border-[rgba(217,178,94,0.14)] pt-6">
+          <SharePanel shareUrl={shareUrl} size="sm" />
+          <Link
+            href="/read"
+            className="btn-ghost !px-4 !py-1.5 text-[11px] uppercase tracking-[0.14em]"
+          >
+            Redo Palm Reading
+          </Link>
+        </div>
+      )}
 
       <DeleteReadingControl shareId={shareId} onDeleted={() => router.replace("/")} />
     </div>
