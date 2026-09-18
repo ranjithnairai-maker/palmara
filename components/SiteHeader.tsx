@@ -6,9 +6,12 @@ type Props = {
    * something like "Redo Palm Reading" instead. Always still links to
    * /read either way. */
   ctaLabel?: string;
+  /** Hide the CTA entirely — e.g. on /read itself, where a "Begin" link
+   * would just point back at the page you're already on. */
+  showCta?: boolean;
 };
 
-export function SiteHeader({ ctaLabel = "Begin" }: Props) {
+export function SiteHeader({ ctaLabel = "Begin", showCta = true }: Props) {
   return (
     <header className="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-6">
       <Link href="/" className="group flex min-w-0 items-center gap-2 sm:gap-2.5">
@@ -20,17 +23,19 @@ export function SiteHeader({ ctaLabel = "Begin" }: Props) {
           Palmistica
         </span>
       </Link>
-      <Link
-        href="/read"
-        // whitespace-nowrap matters here: .btn-ghost is inline-flex, which
-        // doesn't stop its text node from wrapping — a longer ctaLabel
-        // ("Redo Palm Reading") wrapped onto two lines and collided with
-        // the logo on narrow screens without it. Sizes step down at `sm`
-        // so the longer label still fits on one line on a phone.
-        className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-[10px] uppercase tracking-[0.08em] sm:!px-5 sm:!py-2 sm:text-xs sm:tracking-[0.14em]"
-      >
-        {ctaLabel}
-      </Link>
+      {showCta && (
+        <Link
+          href="/read"
+          // whitespace-nowrap matters here: .btn-ghost is inline-flex, which
+          // doesn't stop its text node from wrapping — a longer ctaLabel
+          // ("Redo Palm Reading") wrapped onto two lines and collided with
+          // the logo on narrow screens without it. Sizes step down at `sm`
+          // so the longer label still fits on one line on a phone.
+          className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-[10px] uppercase tracking-[0.08em] sm:!px-5 sm:!py-2 sm:text-xs sm:tracking-[0.14em]"
+        >
+          {ctaLabel}
+        </Link>
+      )}
     </header>
   );
 }

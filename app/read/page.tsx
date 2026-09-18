@@ -153,7 +153,7 @@ export default function ReadPage() {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader showCta={false} />
       <main className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col items-center px-6 py-12">
         {mode === "processing" ? (
           <div className="flex flex-1 flex-col items-center justify-center py-16">
