@@ -79,6 +79,16 @@ export default function LandingPage() {
             <p className="mt-6 text-xs tracking-wide text-cream-faint">
               No account. No sign-up. Your reading lives at its own private link.
             </p>
+            <p className="mt-2 text-xs tracking-wide text-cream-faint">
+              New to palmistry?{" "}
+              <Link
+                href="/blog/life-line-meaning"
+                className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+              >
+                Start with the basics
+              </Link>
+              .
+            </p>
           </div>
 
           {/* Palm focal element */}

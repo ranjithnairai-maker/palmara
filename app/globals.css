@@ -325,6 +325,32 @@
     color: var(--color-cream-faint);
     font-style: italic;
   }
+  .reading-prose table {
+    width: 100%;
+    margin: 1.25rem 0;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .reading-prose th,
+  .reading-prose td {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(217, 178, 94, 0.16);
+  }
+  .reading-prose th {
+    color: var(--color-gold);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .reading-prose a {
+    color: var(--color-gold-bright);
+    text-decoration: underline;
+    text-decoration-color: rgba(217, 178, 94, 0.4);
+    text-underline-offset: 2px;
+  }
+  .reading-prose a:hover {
+    color: var(--color-gold);
+  }
   .reading-prose:first-child > :first-child {
     margin-top: 0;
   }

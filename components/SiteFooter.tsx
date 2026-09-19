@@ -15,6 +15,15 @@ export function SiteFooter() {
           </p>
           <p className="mt-2 flex items-center justify-center gap-3 sm:justify-start">
             <Link
+              href="/blog"
+              className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+            >
+              Guides
+            </Link>
+            <span aria-hidden className="text-[rgba(217,178,94,0.3)]">
+              ·
+            </span>
+            <Link
               href="/privacy"
               className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
             >
