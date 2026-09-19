@@ -68,6 +68,7 @@ export async function updateReading(
       | "detailed_text"
       | "detailed_status"
       | "image_deleted_at"
+      | "generation_claimed_at"
     >
   >,
 ): Promise<void> {
@@ -76,6 +77,64 @@ export async function updateReading(
     .update(patch)
     .eq("id", id);
   if (error) throw new Error(`Update reading failed: ${error.message}`);
+}
+
+// How long a claimed-but-not-yet-resolved generation attempt is trusted to
+// still be running before a later request is allowed to recover it. Well
+// above FUNCTION_TIME_BUDGET_MS / DETAILED_BACKGROUND_TIMEOUT_MS in
+// lib/generateReading.ts so a healthy in-flight attempt is never
+// second-guessed, but short enough that a crashed/killed invocation doesn't
+// strand a reading forever.
+const GENERATION_LEASE_MS = 90_000;
+
+/**
+ * Atomically claims the main reading-generation slot for `id`, so two
+ * concurrent /generate calls (a double-click, a retry racing the original
+ * fire-and-forget kickoff) can't both call the vision model. Returns true
+ * only for the single caller allowed to proceed. Safe to call on a fresh
+ * reading (status defaults to 'processing' with no lease yet — that first
+ * call claims it), a 'failed' one (always reclaimable — the previous
+ * attempt already finished), or a 'processing' one whose lease has expired
+ * (recovers an abandoned attempt). Never claims a 'complete' reading.
+ */
+export async function claimGeneration(id: string): Promise<boolean> {
+  const now = new Date();
+  const leaseExpiry = new Date(now.getTime() - GENERATION_LEASE_MS).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("readings")
+    .update({ status: "processing", generation_claimed_at: now.toISOString() })
+    .eq("id", id)
+    .neq("status", "complete")
+    .or(`status.neq.processing,generation_claimed_at.is.null,generation_claimed_at.lt.${leaseExpiry}`)
+    .select("id");
+  if (error) throw new Error(`Claim generation failed: ${error.message}`);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
+ * Same idea as claimGeneration() but for the on-demand Detailed Reading
+ * step, keyed off detailed_status/detailed_text instead — that pair
+ * already distinguishes "not started" (null) from "in flight"
+ * ('processing') from "done" (detailed_text set), so this needs no lease:
+ * a stuck 'processing' status still blocks a second claim (background
+ * generation for this tier is short enough — see
+ * DETAILED_BACKGROUND_TIMEOUT_MS — that a lease isn't worth the added
+ * complexity here), but any failure message in detailed_status is always
+ * reclaimable immediately, same as claimGeneration()'s 'failed' handling.
+ */
+export async function claimDetailedGeneration(id: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("readings")
+    .update({ detailed_status: "processing" })
+    .eq("id", id)
+    .is("detailed_text", null)
+    // Plain .neq() would silently exclude NULL rows too (`NULL <> 'processing'`
+    // is NULL/falsy in Postgres, not true) — the never-started case is the
+    // common one, so it has to be spelled out explicitly here.
+    .or("detailed_status.is.null,detailed_status.neq.processing")
+    .select("id");
+  if (error) throw new Error(`Claim detailed generation failed: ${error.message}`);
+  return (data?.length ?? 0) > 0;
 }
 
 export async function addMessage(
@@ -201,10 +260,27 @@ export function isUuid(value: string): boolean {
  */
 export async function deleteReadingCompletely(reading: Reading): Promise<void> {
   if (reading.image_path && reading.image_path !== "pending") {
-    await supabaseAdmin.storage
+    // Supabase Storage resolves with { error } on failure rather than
+    // rejecting, so a bare .catch() here previously never saw it — the row
+    // would still get deleted below and report success while the photo
+    // silently stayed in the bucket forever. One retry (storage failures
+    // here are usually transient), then proceed with the deletion either
+    // way — the owner explicitly asked for this and the row/tombstone are
+    // the part of the promise we can guarantee; log loudly so an orphaned
+    // object is at least visible for manual/cron cleanup instead of lost.
+    let { error: storageError } = await supabaseAdmin.storage
       .from(PALM_BUCKET)
-      .remove([reading.image_path])
-      .catch(() => {});
+      .remove([reading.image_path]);
+    if (storageError) {
+      ({ error: storageError } = await supabaseAdmin.storage
+        .from(PALM_BUCKET)
+        .remove([reading.image_path]));
+    }
+    if (storageError) {
+      console.error(
+        `[readings] failed to delete storage object ${reading.image_path} for reading ${reading.id}: ${storageError.message}`,
+      );
+    }
   }
   const { error: tombstoneError } = await supabaseAdmin
     .from("deleted_readings")
@@ -250,12 +326,33 @@ export async function pruneExpiredImages(): Promise<{ pruned: number; checked: n
   let pruned = 0;
   for (const row of rows) {
     if (!row.image_path || row.image_path === "pending") continue;
-    await supabaseAdmin.storage.from(PALM_BUCKET).remove([row.image_path]).catch(() => {});
+    // Only clear image_path once the object is actually confirmed gone —
+    // Storage resolves with { error } rather than rejecting on failure, so
+    // the previous unconditional .catch(() => {}) here masked that and the
+    // row got marked pruned regardless, permanently losing track of an
+    // orphaned object (it drops out of tomorrow's query too, since that
+    // filters on image_path). Leaving image_path intact on failure lets the
+    // next daily run retry it instead.
+    const { error: storageError } = await supabaseAdmin.storage
+      .from(PALM_BUCKET)
+      .remove([row.image_path]);
+    if (storageError) {
+      console.error(
+        `[readings] prune: failed to delete storage object ${row.image_path} for reading ${row.id}: ${storageError.message}`,
+      );
+      continue;
+    }
     const { error: updateError } = await supabaseAdmin
       .from("readings")
       .update({ image_path: null, image_deleted_at: new Date().toISOString() })
       .eq("id", row.id);
-    if (!updateError) pruned++;
+    if (updateError) {
+      console.error(
+        `[readings] prune: storage object ${row.image_path} deleted but DB update failed for reading ${row.id}: ${updateError.message}`,
+      );
+      continue;
+    }
+    pruned++;
   }
   return { pruned, checked: rows.length };
 }

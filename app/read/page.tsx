@@ -32,13 +32,28 @@ export default function ReadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  // Bumped whenever a camera request is cancelled (Cancel button, or
+  // unmount) while getUserMedia() is still pending — the async permission
+  // prompt can resolve well after the user's already backed out, and
+  // without this guard that late resolution would store + display a live
+  // stream behind a UI that's already moved back to "choose".
+  const cameraRequestIdRef = useRef(0);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
   }, []);
 
-  useEffect(() => stopCamera, [stopCamera]);
+  useEffect(() => {
+    return () => {
+      // cameraRequestIdRef is a plain counter, not a DOM node ref — the
+      // lint rule's "node rendered by React" warning here is a false
+      // positive for this pattern.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      cameraRequestIdRef.current++;
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -63,17 +78,26 @@ export default function ReadPage() {
       return;
     }
     setMode("camera");
+    const requestId = ++cameraRequestIdRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 1920 } },
         audio: false,
       });
+      if (cameraRequestIdRef.current !== requestId) {
+        // Cancelled (or unmounted) while the permission prompt was pending —
+        // don't leave this stream's camera light on behind a UI that's
+        // already moved on.
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
     } catch {
+      if (cameraRequestIdRef.current !== requestId) return;
       stopCamera();
       setMode("choose");
       setCameraError(
@@ -254,6 +278,7 @@ export default function ReadPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      cameraRequestIdRef.current++;
                       stopCamera();
                       setMode("choose");
                     }}

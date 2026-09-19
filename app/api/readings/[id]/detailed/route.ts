@@ -1,5 +1,5 @@
 import { NextResponse, after } from "next/server";
-import { getReading, updateReading, isUuid } from "@/lib/readings";
+import { getReading, isUuid, claimDetailedGeneration } from "@/lib/readings";
 import { runDetailedReadingGeneration } from "@/lib/generateReading";
 import { parseDetailedReading } from "@/lib/parse";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
@@ -61,7 +61,15 @@ export async function POST(
     return NextResponse.json(errBody, init);
   }
 
-  await updateReading(id, { detailed_status: "processing" });
+  // Atomically claims the detailed-generation slot — closes the gap
+  // between the reading-fetch checks above and this write, where a second
+  // concurrent request could otherwise also pass them and trigger a second
+  // model call. Losing the race isn't an error: another request already
+  // has it in flight, so the client just keeps polling.
+  const claimed = await claimDetailedGeneration(id);
+  if (!claimed) {
+    return NextResponse.json({ id, status: "processing" });
+  }
 
   // Fire-and-forget: this can legitimately take 20-50+ seconds on the free
   // model — far too long to hold a single request/response open for

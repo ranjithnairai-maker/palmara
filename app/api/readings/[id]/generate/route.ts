@@ -4,6 +4,7 @@ import {
   updateReading,
   loadStoredImageAsDataUrl,
   isUuid,
+  claimGeneration,
 } from "@/lib/readings";
 import { generateAndPersistReading } from "@/lib/generateReading";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
@@ -50,6 +51,16 @@ export async function POST(
     return NextResponse.json({ id, status: reading.status, ...errBody }, init);
   }
 
+  // Atomically claims this reading's generation slot — a concurrent
+  // duplicate call (the fire-and-forget kickoff racing a retry click, or a
+  // retried client request) is turned away here rather than both calling
+  // the vision model. Not claiming isn't an error: the client just keeps
+  // polling for whichever attempt did win.
+  const claimed = await claimGeneration(id);
+  if (!claimed) {
+    return NextResponse.json({ id, status: "processing" });
+  }
+
   const dataUrl = await loadStoredImageAsDataUrl(reading.image_path);
   if (!dataUrl) {
     await updateReading(id, { status: "failed" }).catch(() => {});
@@ -59,7 +70,6 @@ export async function POST(
     );
   }
 
-  await updateReading(id, { status: "processing" });
   const result = await generateAndPersistReading(id, dataUrl);
 
   if (!result.ok) {

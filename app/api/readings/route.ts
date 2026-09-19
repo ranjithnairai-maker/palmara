@@ -11,7 +11,14 @@ import { checkRateLimit, rateLimitedResponse } from "@/lib/rateLimit";
 export const maxDuration = 30;
 export const runtime = "nodejs";
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8MB hard cap server-side
+// Base64 adds ~1/3 overhead, and this arrives as a JSON body — Vercel
+// Functions cap request bodies at 4.5MB regardless of what this route
+// configures, so a decoded-image cap has to leave room for that expansion
+// or large-but-under-this-limit uploads would 413 at the platform edge
+// before ever reaching this handler. 3MB decoded ≈ 4MB encoded, safely
+// under that ceiling. Normal uploads are far smaller anyway — the client
+// (lib/compressImage.ts) resizes to 1200px before this route ever sees it.
+const MAX_BYTES = 3 * 1024 * 1024;
 
 /**
  * Creates a reading: validates + stores the palm image, inserts a row in
@@ -28,7 +35,15 @@ export async function POST(req: NextRequest) {
 
   let body: { image?: unknown };
   try {
-    body = await req.json();
+    const parsed: unknown = await req.json();
+    // req.json() can resolve to any valid JSON value (null, an array, a
+    // string...), not just an object — the previous unconditional
+    // `body.image` access below would throw on a literal `null` body,
+    // surfacing as an unhandled 500 instead of the 400 this deserves.
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    }
+    body = parsed as { image?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }

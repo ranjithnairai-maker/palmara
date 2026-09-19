@@ -156,8 +156,9 @@ async function callOpenRouterOnce(
     return content;
   }
 
+  let raceTimer: ReturnType<typeof setTimeout> | undefined;
   const raceTimeout = new Promise<never>((_, reject) => {
-    setTimeout(
+    raceTimer = setTimeout(
       () => reject(new OpenRouterError("The reader took too long to respond.", 504)),
       timeoutMs,
     );
@@ -166,9 +167,11 @@ async function callOpenRouterOnce(
   try {
     const content = await Promise.race([fetchAndParse(), raceTimeout]);
     clearTimeout(timer);
+    clearTimeout(raceTimer);
     return content;
   } catch (err) {
     clearTimeout(timer);
+    clearTimeout(raceTimer);
     // Whether fetchAndParse() or raceTimeout won, make sure the underlying
     // request is actually cut loose rather than left running unobserved.
     controller.abort();

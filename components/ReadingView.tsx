@@ -60,13 +60,24 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
   // a component function, even one that (like this) only ever runs inside
   // an event handler, never during render.
   const tmpMessageIdRef = useRef(0);
+  // Guards against the 3s poll interval firing a new fetch before the
+  // previous one has resolved (a slow response, or several ticks queuing up
+  // behind one another) — without this, overlapping requests can land out
+  // of order and an older response can overwrite newer state.
+  const fetchingRef = useRef(false);
 
   const refetch = useCallback(async () => {
-    const res = await fetch(`/api/readings/${shareId}`, { cache: "no-store" });
-    if (!res.ok) return;
-    const next = (await res.json()) as ReadingPayload;
-    setPayload(next);
-    setChat(next.messages.slice(1));
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    try {
+      const res = await fetch(`/api/readings/${shareId}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const next = (await res.json()) as ReadingPayload;
+      setPayload(next);
+      setChat(next.messages.slice(1));
+    } finally {
+      fetchingRef.current = false;
+    }
   }, [shareId]);
 
   // Poll while a reading is still being generated.

@@ -58,6 +58,13 @@ export interface Reading {
   /** Proves ownership for manual delete. Server-only — never sent to the client after creation. */
   owner_token: string;
   image_deleted_at: string | null;
+  /** Set when a /generate attempt claims the row (see lib/readings.ts
+   * claimGeneration) — an expiring lease so a second concurrent or
+   * duplicate request can't start a second, redundant model call while one
+   * is already in flight, but a crashed/abandoned attempt can still be
+   * recovered after it expires. Not meaningful to clients; harmless to
+   * expose since it's just a timestamp. */
+  generation_claimed_at: string | null;
 }
 
 /** Reading shape safe to send to any viewer — owner_token stripped. */
