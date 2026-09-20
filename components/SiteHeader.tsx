@@ -23,19 +23,27 @@ export function SiteHeader({ ctaLabel = "Begin", showCta = true }: Props) {
           Palmistica
         </span>
       </Link>
-      {showCta && (
+      <div className="flex shrink-0 items-center gap-3 sm:gap-5">
         <Link
-          href="/read"
-          // whitespace-nowrap matters here: .btn-ghost is inline-flex, which
-          // doesn't stop its text node from wrapping — a longer ctaLabel
-          // ("Redo Palm Reading") wrapped onto two lines and collided with
-          // the logo on narrow screens without it. Sizes step down at `sm`
-          // so the longer label still fits on one line on a phone.
-          className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-[10px] uppercase tracking-[0.08em] sm:!px-5 sm:!py-2 sm:text-xs sm:tracking-[0.14em]"
+          href="/blog"
+          className="whitespace-nowrap text-[10px] tracking-wide text-cream-faint underline-offset-4 transition-colors hover:text-gold sm:text-xs"
         >
-          {ctaLabel}
+          Guides
         </Link>
-      )}
+        {showCta && (
+          <Link
+            href="/read"
+            // whitespace-nowrap matters here: .btn-ghost is inline-flex, which
+            // doesn't stop its text node from wrapping — a longer ctaLabel
+            // ("Redo Palm Reading") wrapped onto two lines and collided with
+            // the logo on narrow screens without it. Sizes step down at `sm`
+            // so the longer label still fits on one line on a phone.
+            className="btn-ghost shrink-0 whitespace-nowrap !px-3 !py-1.5 text-[10px] uppercase tracking-[0.08em] sm:!px-5 sm:!py-2 sm:text-xs sm:tracking-[0.14em]"
+          >
+            {ctaLabel}
+          </Link>
+        )}
+      </div>
     </header>
   );
 }
