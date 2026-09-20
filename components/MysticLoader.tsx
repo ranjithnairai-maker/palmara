@@ -40,7 +40,7 @@ export function MysticLoader({ label }: { label?: string }) {
         {label ?? PHRASES[i]}
       </p>
       <p className="mt-2 text-xs tracking-wide text-cream-faint">
-        This can take up to a minute on the free model.
+        This can take up to a minute as Palmistica analyzes closely.
       </p>
     </div>
   );

@@ -74,6 +74,12 @@ export default function LandingPage() {
               >
                 How it works
               </a>
+              <Link
+                href="/blog"
+                className="text-sm tracking-wide text-cream-faint underline-offset-4 transition-colors hover:text-gold"
+              >
+                Guides
+              </Link>
             </div>
 
             <p className="mt-6 text-xs tracking-wide text-cream-faint">

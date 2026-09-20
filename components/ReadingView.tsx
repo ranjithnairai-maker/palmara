@@ -232,7 +232,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
         {waitedTooLong && !readOnly && (
           <div className="mt-10 max-w-sm text-center">
             <p className="text-sm text-cream-muted">
-              The free model is running slow. You can nudge it to try again.
+              Analyzing is taking a while. You can nudge it to try again.
             </p>
             <button
               type="button"
@@ -265,7 +265,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-cream-muted">
             {reason ??
-              "The free model can be slow or busy. Your photo is saved — try once more."}
+              "Analyzing can be slow or busy at times. Your photo is saved — try once more."}
           </p>
           {!readOnly && (
             <div className="mt-7 flex flex-col items-center gap-3">
@@ -367,7 +367,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
                 Revealing Your Full Reading…
               </h3>
               <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-cream-muted">
-                The free reader can take up to a minute for the long version.
+                Analyzing can take up to a minute for the long version.
               </p>
               {detailedWaitedTooLong && (
                 <button
