@@ -35,6 +35,9 @@ around.
   server-only.
 - `OPENROUTER_API_KEY` is read only inside `lib/openrouter.ts`, called only
   from Route Handlers.
+- `STRIPE_SECRET_KEY` is read only inside `lib/stripe.ts`; `STRIPE_WEBHOOK_SECRET`
+  is read only inside `app/api/stripe/webhook/route.ts`. Both server-only,
+  same rule as above.
 - `.gitignore` excludes `.env*` with `!.env.example` carved out.
 - `.env.example` documents every variable name with **no real values**.
 
@@ -75,14 +78,24 @@ around.
    - `DELETE /api/readings/[id]` (no OpenRouter cost, but the one
      irreversible write in the app, gated only by `owner_token` — rate
      limiting is defense-in-depth against token guessing): 6/min, 20/hour
+   - `POST /api/ebook/checkout` (creates a real Stripe Checkout Session):
+     5/min, 20/hour
+   - `GET /api/ebook/download` (download_token's own cap/expiry is the real
+     limit — this just slows brute-forcing random tokens): 10/min, 40/hour
+   - `POST /api/stripe/webhook` is intentionally **not** rate-limited — it's
+     called by Stripe, not a client, and is protected by signature
+     verification instead (see below).
    Limits fail **open** on an infra error (a rate-limit outage should never
    block a real user), and store a **salted SHA-256 hash** of the IP, never
    the raw address.
-3. **Private storage.** The `palm-photos` bucket is private; images are only
-   ever served via short-lived (1h) signed URLs generated server-side.
+3. **Private storage.** The `palm-photos` and `ebook-files` buckets are both
+   private; images and the ebook PDF are only ever served via short-lived
+   signed URLs generated server-side (1h for images, 5min for the ebook —
+   see point 6 below for why the ebook download has an extra layer on top).
 4. **RLS with no policies** on every table (`readings`, `reading_messages`,
-   `rate_limit_hits`, `deleted_readings`) — the anon/publishable key can do
-   nothing; all access is via the service role key inside Route Handlers.
+   `rate_limit_hits`, `deleted_readings`, `ebook_orders`) — the
+   anon/publishable key can do nothing; all access is via the service role
+   key inside Route Handlers.
 5. **Owner-token deletion**, the app's one real authorization boundary.
    There are no accounts, so a reading's `owner_token` (a `gen_random_uuid()`,
    returned exactly once, in the `POST /api/readings` response) is what
@@ -92,6 +105,18 @@ around.
    can't be used to narrow a guess. The client stashes it in `localStorage`;
    losing that storage means losing the ability to self-delete, by design —
    there's a footer contact link as the manual fallback.
+6. **Verified-webhook-only payment confirmation.** `app/api/stripe/webhook/route.ts`
+   is the *only* code path that can mark an ebook order paid, and only after
+   `stripe.webhooks.constructEvent()` verifies the request's signature
+   against `STRIPE_WEBHOOK_SECRET` using the raw request body. The
+   success-page redirect the browser lands on after Checkout carries **zero**
+   authority — it only polls `GET /api/ebook/status`, which just checks
+   whether the webhook has already landed. Never add a path that trusts a
+   client-supplied "payment succeeded" signal. Downloads are gated a second
+   time by `download_token` (48h expiry, capped use count, checked
+   atomically in `lib/ebookOrders.ts` `claimDownload()`), which is a
+   separate value from the Checkout Session id that appears in the
+   success-page URL.
 
 ## Code Quality & Safety
 
@@ -129,7 +154,7 @@ list, not just add code.
 | Risk | Status here |
 | --- | --- |
 | A01 Broken Access Control | No accounts by design; mitigated by unguessable UUIDs + rate limiting (see above). The one exception — deleting a reading — is gated by a timing-safe `owner_token` comparison, the app's real authorization boundary; the "hidden unless your browser has the token" UI is cosmetic, not the enforcement. Every write validates the target row exists and is in the expected state before acting on it. |
-| A02 Cryptographic Failures | No passwords or payment data stored. Secrets are env-var only. IPs are hashed, not stored raw, in the rate-limit table. All traffic is HTTPS (enforced by Vercel + HSTS header). |
+| A02 Cryptographic Failures | No passwords or card data stored — Stripe Checkout is hosted, so card details never reach this app. Secrets are env-var only. IPs are hashed, not stored raw, in the rate-limit table. All traffic is HTTPS (enforced by Vercel + HSTS header). |
 | A03 Injection | All DB access via the Supabase client's parameterized builder — no string-built SQL anywhere in the app. User content rendered in chat is either plain-text (`<p>{content}</p>`, React-escaped) or passed through `react-markdown` **without** `rehype-raw`, so raw HTML/script in a message can't execute. |
 | A04 Insecure Design | Reading generation is idempotent and re-entrant (safe to retry); failures degrade to a retryable `failed` status rather than a stuck or duplicated state. |
 | A05 Security Misconfiguration | `next.config.ts` sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security`, and a `Content-Security-Policy` on every response. **Known relaxation:** the CSP allows `'unsafe-inline'` on `script-src` because Next.js injects inline hydration data without a nonce set up here — documented, not accidental. Storage bucket is private, not public. |

@@ -319,9 +319,19 @@ export default function ReadPage() {
             )}
 
             <div className="mt-10 text-center">
+              <p className="text-xs tracking-wide text-cream-faint">
+                Want a companion while you read?{" "}
+                <Link
+                  href="/ebook"
+                  className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+                >
+                  Get the full guide for $1
+                </Link>
+                .
+              </p>
               <Link
                 href="/"
-                className="text-xs tracking-wide text-cream-faint underline-offset-4 hover:text-gold"
+                className="mt-3 inline-block text-xs tracking-wide text-cream-faint underline-offset-4 hover:text-gold"
               >
                 ← Back to the start
               </Link>

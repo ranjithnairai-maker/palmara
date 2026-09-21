@@ -51,6 +51,18 @@ export default async function BlogArticlePage({
           <Link href="/read" className="btn-gold">
             Begin your reading
           </Link>
+          {post.offerEbook && (
+            <p className="mt-4 text-xs tracking-wide text-cream-faint">
+              Want the next step?{" "}
+              <Link
+                href="/ebook"
+                className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+              >
+                Get the full guide for $1
+              </Link>
+              .
+            </p>
+          )}
         </div>
 
         <hr className="hairline my-10" />

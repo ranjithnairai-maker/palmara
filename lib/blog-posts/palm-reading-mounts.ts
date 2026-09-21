@@ -6,6 +6,7 @@ export const palmReadingMounts: BlogPost = {
   metaTitle: "Palm Reading Mounts: The Complete Guide to All 7",
   metaDescription:
     "Learn what each mount on your palm traditionally represents, how to spot a high or flat one on your own hand, and get a free AI palm reading at Palmistica.",
+  offerEbook: true,
   body: `
 Hold your palm up under decent light and tilt it slightly. Notice how some patches sit a little higher than the rest, like small hills, while others barely rise above the skin around them? Those are mounts. People have been reading them for centuries as a kind of gentle terrain map of who you are.
 

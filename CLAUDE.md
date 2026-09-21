@@ -181,13 +181,48 @@ runs TypeScript and fails on any type error.
   `analysis_json` simply has no `suggestedQuestions` key) — never assume
   it's present.
 
+- **Ebook checkout (`$1` "Learn Palmistry Basics" PDF)** — a completely
+  separate payment path from the `TipJar` (which is just Stripe Payment
+  Link URLs, no server code at all). This one has a real deliverable, so it
+  needs actual confirmation:
+  1. `POST /api/ebook/checkout` (`lib/stripe.ts`) creates a Stripe Checkout
+     Session against a fixed `STRIPE_EBOOK_PRICE_ID` (a real Price object —
+     never a client-suppliable amount) and returns its URL for the client
+     to redirect to. Payment happens entirely on Stripe's hosted page.
+  2. **`POST /api/stripe/webhook` is the only thing that ever marks an
+     order paid.** It verifies the Stripe signature (`stripe.webhooks.
+     constructEvent`, raw body via `req.text()` — never `req.json()`, which
+     would break the signature), then on `checkout.session.completed` /
+     `checkout.session.async_payment_succeeded` with `payment_status ===
+     "paid"`, calls `recordPaidOrder()` (`lib/ebookOrders.ts`), which inserts
+     an `ebook_orders` row keyed uniquely on `stripe_session_id` — a unique
+     violation there is treated as success (idempotent against Stripe's
+     webhook retries), not an error.
+  3. `app/ebook/success/page.tsx` (via `EbookSuccessClient.tsx`) polls
+     `GET /api/ebook/status?session_id=...` every ~2.5s. **The redirect
+     back to this page is UX only** — it never itself unlocks anything;
+     the page just waits for the webhook (step 2) to have landed.
+  4. `GET /api/ebook/download?token=...` is the actual gate: `claimDownload()`
+     checks the `download_token`'s own expiry (48h from `paid_at`) and use
+     cap (`max_downloads`, default 5) with an atomic `.lt()` in the UPDATE's
+     WHERE clause (race-safe against two simultaneous clicks on the last
+     remaining download), then mints a **fresh 5-minute signed URL** against
+     the single shared PDF object in the private `ebook-files` bucket and
+     redirects to it. The token is the real access control; the signed URL
+     is just transport underneath it — never return or cache the signed URL
+     itself anywhere longer-lived than that redirect.
+  If you add a new Stripe webhook event type, keep it verified-signature-only
+  and idempotent the same way — never add a second path (e.g. trusting a
+  client-supplied "I paid" flag) that can mark an order paid.
+
 ## Conventions
 
 - Server-only code (`lib/supabase.ts`, `lib/readings.ts`, `lib/openrouter.ts`,
-  `lib/rateLimit.ts`, `lib/og-image.tsx`) must only be imported by Route
-  Handlers or Server Components — never anything `"use client"`. This is how
-  the Supabase service role key and OpenRouter key stay out of the client
-  bundle; verify it whenever you add a new import of these modules.
+  `lib/rateLimit.ts`, `lib/og-image.tsx`, `lib/stripe.ts`, `lib/ebookOrders.ts`)
+  must only be imported by Route Handlers or Server Components — never
+  anything `"use client"`. This is how the Supabase service role key,
+  OpenRouter key, and Stripe secret key stay out of the client bundle;
+  verify it whenever you add a new import of these modules.
 - API errors returned to the client are short, hand-written, in-voice
   strings ("The reader lost the thread there…") — never `err.message` from
   a caught exception unless you wrote that message yourself as validation

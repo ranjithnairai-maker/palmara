@@ -93,6 +93,13 @@ export default function LandingPage() {
               >
                 Start with the basics
               </Link>
+              , or get{" "}
+              <Link
+                href="/ebook"
+                className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+              >
+                the full guide for $1
+              </Link>
               .
             </p>
           </div>

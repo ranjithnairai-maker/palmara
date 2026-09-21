@@ -6,6 +6,7 @@ export const waterHand: BlogPost = {
   metaTitle: "Water Hand Palmistry: Meaning, Traits & Free Reading",
   metaDescription:
     "What is a Water hand in palmistry? Long, oval palm, long fingers, deep intuition. See the traits, then check your own hand type free at Palmistica.",
+  offerEbook: true,
   body: `
 ## What Is a Water Hand?
 

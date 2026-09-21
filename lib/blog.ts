@@ -14,6 +14,11 @@ export interface BlogPost {
    * Most articles don't have one yet — that's a deliberate follow-up, not
    * an oversight (see the blog feature handoff doc). */
   schema?: Record<string, unknown>[];
+  /** Shows a quiet second line offering the $1 ebook below the reading CTA
+   * — recommended on articles closest to "the next step after a free
+   * reading" (the four hand-element pieces, the mounts piece), not all of
+   * them, so it never reads as an upsell tacked onto every page. */
+  offerEbook?: boolean;
 }
 
 export const BLOG_POSTS: BlogPost[] = BLOG_POSTS_LIST;

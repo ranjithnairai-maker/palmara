@@ -6,6 +6,7 @@ export const earthHand: BlogPost = {
   metaTitle: "Earth Hand Palmistry: What a Square Palm Reveals",
   metaDescription:
     "Earth hand palmistry explained: square palms, short fingers, and what tradition says about practicality. Get your free AI palm reading at Palmistica.",
+  offerEbook: true,
   body: `
 Think of the Earth hand as the palm-reading world's answer to the friend who shows up with a truck the moment you mention you're moving apartments. No drama, no hedging, just a square palm, short fingers, and a handshake that feels like it means it.
 

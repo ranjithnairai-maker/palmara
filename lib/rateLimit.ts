@@ -46,6 +46,19 @@ const RULES: Record<string, RateLimitRule[]> = {
     { windowMs: 60_000, max: 6 },
     { windowMs: 60 * 60_000, max: 20 },
   ],
+  // Creates a real Stripe Checkout Session (a live API call to Stripe) —
+  // loose cap mainly against a script hammering this into a pile of
+  // abandoned sessions, not against a genuine buyer.
+  ebook_checkout: [
+    { windowMs: 60_000, max: 5 },
+    { windowMs: 60 * 60_000, max: 20 },
+  ],
+  // download_token's own cap (see lib/ebookOrders.ts) is the real limit on
+  // a given order; this just stops brute-forcing random tokens.
+  ebook_download: [
+    { windowMs: 60_000, max: 10 },
+    { windowMs: 60 * 60_000, max: 40 },
+  ],
 };
 
 export function getClientIp(req: Request): string {

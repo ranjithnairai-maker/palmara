@@ -6,6 +6,7 @@ export const airHand: BlogPost = {
   metaTitle: "Air Hand Palmistry: What It Means | Palmistica",
   metaDescription:
     "Square palm, long fingers, visible knuckles. Here's what an Air hand means in palmistry, and how to find out which element yours is, free.",
+  offerEbook: true,
   body: `
 ## What Is an Air Hand in Palmistry?
 

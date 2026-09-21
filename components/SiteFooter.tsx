@@ -24,6 +24,15 @@ export function SiteFooter() {
               ·
             </span>
             <Link
+              href="/ebook"
+              className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
+            >
+              Ebook
+            </Link>
+            <span aria-hidden className="text-[rgba(217,178,94,0.3)]">
+              ·
+            </span>
+            <Link
               href="/privacy"
               className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
             >

@@ -46,15 +46,49 @@ create table if not exists public.rate_limit_hits (
 create index if not exists rate_limit_hits_lookup_idx
   on public.rate_limit_hits (bucket, client_key, created_at);
 
+-- Paid ebook orders ("Learn Palmistry Basics", $1 one-time). A row only
+-- ever gets inserted by the verified Stripe webhook handler once a
+-- checkout.session.completed event confirms payment — its mere existence
+-- means the order is paid, so there's no separate status column to track.
+-- download_token is a capability distinct from stripe_session_id (which is
+-- visible in the success-page URL) so the success page can be safely
+-- revisited without itself granting a fresh download once the token's own
+-- cap/expiry are spent. See app/api/stripe/webhook/route.ts.
+create table if not exists public.ebook_orders (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  stripe_session_id text not null unique,
+  stripe_event_id text not null,
+  email text,
+  paid_at timestamptz not null default now(),
+  download_token uuid not null default gen_random_uuid(),
+  download_count int not null default 0,
+  max_downloads int not null default 5,
+  expires_at timestamptz not null default (now() + interval '48 hours')
+);
+
+create unique index if not exists ebook_orders_download_token_idx
+  on public.ebook_orders (download_token);
+
 -- Lock all tables down. No policies => no anon/public access; the
 -- server's service role key bypasses RLS.
 alter table public.readings enable row level security;
 alter table public.reading_messages enable row level security;
 alter table public.rate_limit_hits enable row level security;
 alter table public.deleted_readings enable row level security;
+alter table public.ebook_orders enable row level security;
 
 -- Private Storage bucket for palm photos (create via dashboard or this insert).
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('palm-photos', 'palm-photos', false, 10485760,
         array['image/jpeg','image/png','image/webp'])
+on conflict (id) do nothing;
+
+-- Private Storage bucket holding the single shared ebook PDF. Access is
+-- gated entirely by the download_token cap/expiry check in
+-- app/api/ebook/download/route.ts, not by bucket policy — that route mints
+-- a short-lived signed URL per allowed download rather than exposing this
+-- bucket directly.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('ebook-files', 'ebook-files', false, 52428800, array['application/pdf'])
 on conflict (id) do nothing;

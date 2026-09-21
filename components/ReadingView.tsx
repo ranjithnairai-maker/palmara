@@ -459,6 +459,16 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
             </div>
           )}
 
+          <div className="mt-10 rounded-2xl border border-[rgba(217,178,94,0.18)] bg-[rgba(23,19,31,0.4)] px-6 py-7 text-center">
+            <p className="mx-auto max-w-md text-sm leading-relaxed text-cream-muted">
+              Want to go deeper? The full guide covers every line, mount, and
+              hand shape.
+            </p>
+            <Link href="/ebook" className="btn-ghost mt-5 inline-block">
+              Get the guide — $1
+            </Link>
+          </div>
+
           <TipJar />
 
           <hr className="hairline my-10" />

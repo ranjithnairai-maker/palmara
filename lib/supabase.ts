@@ -19,3 +19,6 @@ export const supabaseAdmin = createClient(url, serviceRoleKey, {
 });
 
 export const PALM_BUCKET = "palm-photos";
+export const EBOOK_BUCKET = "ebook-files";
+/** Fixed object path — one shared PDF for every order, not per-purchase. */
+export const EBOOK_FILE_PATH = "learn-palmistry-basics.pdf";

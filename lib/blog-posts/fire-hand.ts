@@ -6,6 +6,7 @@ export const fireHand: BlogPost = {
   metaTitle: "Fire Hand Palmistry: What It Looks Like & Means | Palmistica",
   metaDescription:
     "A fire hand has a long palm and short fingers, and palmistry ties it to energy and drive. See what element your hand is, free, at Palmistica.",
+  offerEbook: true,
   body: `
 ## What Is a Fire Hand in Palmistry?
 
