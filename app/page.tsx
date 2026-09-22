@@ -80,6 +80,9 @@ export default function LandingPage() {
               >
                 Guides
               </Link>
+              <Link href="/ebook" className="btn-ghost !px-4 !py-2 text-xs">
+                Get the guide — $1
+              </Link>
             </div>
 
             <p className="mt-6 text-xs tracking-wide text-cream-faint">
@@ -92,13 +95,6 @@ export default function LandingPage() {
                 className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
               >
                 Start with the basics
-              </Link>
-              , or get{" "}
-              <Link
-                href="/ebook"
-                className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
-              >
-                the full guide for $1
               </Link>
               .
             </p>
