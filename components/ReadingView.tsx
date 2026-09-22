@@ -465,7 +465,7 @@ export function ReadingView({ initial, shareId, readOnly = false }: Props) {
               hand shape.
             </p>
             <Link href="/ebook" className="btn-ghost mt-5 inline-block">
-              Get the guide — $1
+              Ebook
             </Link>
           </div>
 

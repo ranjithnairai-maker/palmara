@@ -325,7 +325,7 @@ export default function ReadPage() {
                   href="/ebook"
                   className="underline decoration-[rgba(217,178,94,0.4)] underline-offset-2 hover:text-gold"
                 >
-                  Get the full guide for $1
+                  Get the Ebook
                 </Link>
                 .
               </p>

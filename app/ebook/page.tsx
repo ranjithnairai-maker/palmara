@@ -76,7 +76,7 @@ export default function EbookPage() {
             disabled={loading}
             className="btn-gold mt-6 disabled:opacity-60"
           >
-            {loading ? "Starting checkout…" : "Get the guide — $1"}
+            {loading ? "Starting checkout…" : "Get the Ebook"}
           </button>
           {error && <p className="mt-4 text-sm text-[#f0c9c9]">{error}</p>}
           <p className="mt-4 text-[11px] text-cream-faint">

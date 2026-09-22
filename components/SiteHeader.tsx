@@ -34,7 +34,7 @@ export function SiteHeader({ ctaLabel = "Begin", showCta = true }: Props) {
           href="/ebook"
           className="whitespace-nowrap text-[10px] tracking-wide text-cream-faint underline-offset-4 transition-colors hover:text-gold sm:text-xs"
         >
-          Ebook $1
+          Ebook
         </Link>
         {showCta && (
           <Link
